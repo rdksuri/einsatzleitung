@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Einsatzleitung — Live</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --paper:#f2efe9;
+    --ink:#1b1d1c;
+    --line:#c9c3b6;
+    --red:#c8281f;
+    --amber:#b8860b;
+    --green:#3d6b3a;
+    --panel:#ffffff;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font-family:var(--sans);}
+  body{display:flex;flex-direction:column;}
+
+  header{
+    background:var(--ink);color:var(--paper);
+    padding:14px 20px;
+    display:flex;align-items:center;justify-content:space-between;
+    flex-wrap:wrap;gap:10px;
+    border-bottom:4px solid var(--red);
+  }
+  header .title{display:flex;align-items:baseline;gap:10px;}
+  header .title h1{font-size:18px;margin:0;letter-spacing:0.02em;font-weight:700;text-transform:uppercase;}
+  header .title .sub{font-family:var(--mono);font-size:12px;opacity:0.75;}
+  header .status-row{display:flex;align-items:center;gap:14px;font-family:var(--mono);font-size:12px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;margin-right:6px;}
+  .dot.stale{background:var(--amber);}
+  .dot.off{background:#888;}
+
+  main{
+    flex:1;display:grid;
+    grid-template-columns: 360px 1fr;
+    gap:0;
+    min-height:0;
+  }
+  @media (max-width: 860px){
+    main{grid-template-columns: 1fr; grid-template-rows:auto auto;}
+  }
+
+  .panel{
+    background:var(--panel);
+    border-right:1px solid var(--line);
+    overflow-y:auto;
+    padding:18px;
+    display:flex;flex-direction:column;gap:18px;
+  }
+  .card{border:1px solid var(--line);padding:14px;background:var(--panel);}
+  .card h2{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 10px;color:var(--red);font-weight:700;}
+
+  label{display:block;font-size:12px;font-weight:600;margin-bottom:4px;margin-top:10px;}
+  label:first-child{margin-top:0;}
+  input[type=text], input[type=number], select, textarea{
+    width:100%;padding:8px;border:1px solid var(--line);background:var(--paper);
+    font-family:var(--sans);font-size:14px;color:var(--ink);
+  }
+  input:focus, select:focus, textarea:focus{outline:2px solid var(--red);outline-offset:1px;}
+  textarea{resize:vertical;min-height:50px;}
+
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+  button{
+    font-family:var(--sans);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:0.03em;
+    padding:10px 14px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);cursor:pointer;
+  }
+  button.secondary{background:var(--panel);color:var(--ink);}
+  button.danger{background:var(--red);border-color:var(--red);color:#fff;}
+  button:disabled{opacity:0.5;cursor:not-allowed;}
+  button:hover:not(:disabled){filter:brightness(1.15);}
+
+  .big-number{font-family:var(--mono);font-size:34px;font-weight:700;line-height:1;}
+  .field-note{font-size:11px;color:#666;margin-top:4px;}
+
+  #map{width:100%;height:100%;min-height:320px;}
+  .map-wrap{position:relative;}
+  .map-hint{
+    position:absolute;top:10px;left:10px;z-index:1000;
+    background:rgba(255,255,255,0.92);border:1px solid var(--line);
+    padding:6px 10px;font-size:12px;font-family:var(--mono);
+  }
+  .coord{
+    position:absolute;bottom:10px;left:10px;z-index:1000;
+    background:rgba(255,255,255,0.92);border:1px solid var(--line);
+    padding:6px 10px;font-size:11px;font-family:var(--mono);
+  }
+
+  .log{display:flex;flex-direction:column;gap:0;}
+  .log-entry{border-bottom:1px solid var(--line);padding:10px 0;}
+  .log-entry:last-child{border-bottom:none;}
+  .log-entry .meta{font-family:var(--mono);font-size:11px;color:#666;margin-bottom:3px;}
+  .log-entry .text{font-size:14px;}
+  .empty{color:#888;font-size:13px;font-style:italic;padding:10px 0;}
+
+  .name-badge{font-family:var(--mono);font-size:12px;background:var(--paper);border:1px solid var(--line);padding:6px 10px;display:flex;gap:8px;align-items:center;}
+  .name-badge input{border:none;background:transparent;padding:0;width:100px;font-family:var(--mono);}
+  .name-badge input:focus{outline:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">
+    <h1>Einsatzleitung</h1>
+    <span class="sub" id="einsatzIdLabel">— kein aktiver Einsatz —</span>
+  </div>
+  <div class="status-row">
+    <span><span class="dot" id="syncDot"></span><span id="syncLabel">verbunden</span></span>
+    <span id="lastUpdate">–</span>
+    <label class="name-badge">Kürzel:
+      <input type="text" id="personName" placeholder="z.B. LL" maxlength="6">
+    </label>
+  </div>
+</header>
+
+<main>
+  <div class="panel">
+
+    <div class="card">
+      <h2>Einsatz</h2>
+      <label for="einsatzOrt">Einsatzort</label>
+      <input type="text" id="einsatzOrt" placeholder="Adresse / Ortsbezeichnung">
+      <div class="row2">
+        <div>
+          <label for="status">Status</label>
+          <select id="status">
+            <option>Alarmiert</option>
+            <option>Anfahrt</option>
+            <option selected>Vor Ort</option>
+            <option>Sichtung läuft</option>
+            <option>Abtransport läuft</option>
+            <option>Abgeschlossen</option>
+          </select>
+        </div>
+        <div>
+          <label for="anzahlPatienten">Anzahl Patienten</label>
+          <input type="number" id="anzahlPatienten" min="0" value="0">
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <button id="btnSaveEinsatz">Speichern</button>
+        <button class="danger" id="btnNewEinsatz">Neuer Einsatz</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Sichtungskategorien</h2>
+      <div class="row2">
+        <div><label>T1 (rot)</label><input type="number" id="t1" min="0" value="0"></div>
+        <div><label>T2 (gelb)</label><input type="number" id="t2" min="0" value="0"></div>
+        <div><label>T3 (grün)</label><input type="number" id="t3" min="0" value="0"></div>
+        <div><label>T4 (blau)</label><input type="number" id="t4" min="0" value="0"></div>
+      </div>
+      <div class="field-note">Wird mit „Speichern" oben übernommen.</div>
+    </div>
+
+    <div class="card">
+      <h2>Eintrag hinzufügen</h2>
+      <textarea id="logText" placeholder="Beobachtung, Massnahme, Meldung ..."></textarea>
+      <div style="margin-top:10px;">
+        <button id="btnAddLog">Eintrag senden</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="map-hint">Klick auf Karte = Bereitstellungsort setzen/verschieben</div>
+    <div class="coord" id="coordLabel">Bereitstellungsort: nicht gesetzt</div>
+  </div>
+</main>
+
+<div class="panel" style="border-right:none;border-top:1px solid var(--line);">
+  <div class="card" style="flex:1;">
+    <h2>Verlauf</h2>
+    <div class="log" id="logList"><div class="empty">Noch keine Einträge.</div></div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = "einsatz-current";
+const POLL_MS = 15000; // alle 15 Sekunden statt nur minütlich
+
+let state = null;       // zuletzt bekannter geteilter Zustand
+let localVersionSeen = null;
+let map, marker;
+let pollTimer = null;
+
+function defaultState(){
+  return {
+    id: "E-" + Date.now().toString(36).toUpperCase(),
+    ort: "",
+    status: "Vor Ort",
+    anzahlPatienten: 0,
+    triage: {t1:0,t2:0,t3:0,t4:0},
+    bereitstellungsort: null, // {lat, lng}
+    log: [],
+    updatedAt: Date.now()
+  };
+}
+
+function personName(){
+  const el = document.getElementById('personName');
+  return (el.value || '???').trim().toUpperCase().slice(0,6);
+}
+
+// --- Storage ---
+async function loadRemote(){
+  try{
+    const res = await window.storage.get(STORAGE_KEY, true);
+    if(res && res.value){
+      return JSON.parse(res.value);
+    }
+    return null;
+  }catch(e){
+    return null;
+  }
+}
+
+async function saveRemote(newState){
+  newState.updatedAt = Date.now();
+  try{
+    await window.storage.set(STORAGE_KEY, JSON.stringify(newState), true);
+    state = newState;
+    renderAll();
+    setSyncStatus('ok');
+  }catch(e){
+    setSyncStatus('error');
+    console.error('Speichern fehlgeschlagen', e);
+  }
+}
+
+function setSyncStatus(kind){
+  const dot = document.getElementById('syncDot');
+  const label = document.getElementById('syncLabel');
+  dot.className = 'dot' + (kind==='error' ? ' off' : (kind==='stale' ? ' stale' : ''));
+  label.textContent = kind==='error' ? 'Fehler' : (kind==='stale' ? 'wird geladen' : 'verbunden');
+  document.getElementById('lastUpdate').textContent = state ? ('Update: ' + new Date(state.updatedAt).toLocaleTimeString('de-CH')) : '–';
+}
+
+// --- Map ---
+function initMap(){
+  map = L.map('map', {zoomControl:true}).setView([46.8800, 8.6350], 12); // Kanton Uri als Default-Zentrum
+  L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg', {
+    attribution: '© swisstopo',
+    maxZoom: 18
+  }).addTo(map);
+
+  map.on('click', (e) => {
+    setBereitstellungsort(e.latlng.lat, e.latlng.lng);
+  });
+}
+
+function setBereitstellungsort(lat, lng){
+  if(marker){
+    marker.setLatLng([lat,lng]);
+  } else {
+    marker = L.marker([lat,lng], {draggable:true}).addTo(map);
+    marker.on('dragend', () => {
+      const p = marker.getLatLng();
+      persistBereitstellungsort(p.lat, p.lng);
+    });
+  }
+  persistBereitstellungsort(lat, lng);
+}
+
+async function persistBereitstellungsort(lat, lng){
+  const fresh = (await loadRemote()) || state || defaultState();
+  fresh.bereitstellungsort = {lat: +lat.toFixed(6), lng: +lng.toFixed(6)};
+  fresh.log = fresh.log || [];
+  fresh.log.unshift({
+    zeit: Date.now(),
+    person: personName(),
+    text: 'Bereitstellungsort gesetzt: ' + fresh.bereitstellungsort.lat + ', ' + fresh.bereitstellungsort.lng
+  });
+  await saveRemote(fresh);
+}
+
+// --- Render ---
+function renderAll(){
+  if(!state) return;
+  document.getElementById('einsatzIdLabel').textContent = state.id + (state.ort ? ' — ' + state.ort : '');
+  document.getElementById('einsatzOrt').value = state.ort || '';
+  document.getElementById('status').value = state.status || 'Vor Ort';
+  document.getElementById('anzahlPatienten').value = state.anzahlPatienten ?? 0;
+  document.getElementById('t1').value = state.triage?.t1 ?? 0;
+  document.getElementById('t2').value = state.triage?.t2 ?? 0;
+  document.getElementById('t3').value = state.triage?.t3 ?? 0;
+  document.getElementById('t4').value = state.triage?.t4 ?? 0;
+
+  if(state.bereitstellungsort){
+    const {lat,lng} = state.bereitstellungsort;
+    document.getElementById('coordLabel').textContent = 'Bereitstellungsort: ' + lat + ', ' + lng;
+    if(marker){ marker.setLatLng([lat,lng]); }
+    else { marker = L.marker([lat,lng], {draggable:true}).addTo(map);
+      marker.on('dragend', () => { const p = marker.getLatLng(); persistBereitstellungsort(p.lat, p.lng); });
+    }
+  } else {
+    document.getElementById('coordLabel').textContent = 'Bereitstellungsort: nicht gesetzt';
+  }
+
+  const list = document.getElementById('logList');
+  const entries = state.log || [];
+  if(entries.length === 0){
+    list.innerHTML = '<div class="empty">Noch keine Einträge.</div>';
+  } else {
+    list.innerHTML = entries.map(e => `
+      <div class="log-entry">
+        <div class="meta">${new Date(e.zeit).toLocaleTimeString('de-CH')} · ${escapeHtml(e.person)}</div>
+        <div class="text">${escapeHtml(e.text)}</div>
+      </div>
+    `).join('');
+  }
+  setSyncStatus('ok');
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// --- Actions ---
+async function handleSaveEinsatz(){
+  const fresh = (await loadRemote()) || state || defaultState();
+  fresh.ort = document.getElementById('einsatzOrt').value;
+  fresh.status = document.getElementById('status').value;
+  fresh.anzahlPatienten = parseInt(document.getElementById('anzahlPatienten').value || '0', 10);
+  fresh.triage = {
+    t1: parseInt(document.getElementById('t1').value || '0', 10),
+    t2: parseInt(document.getElementById('t2').value || '0', 10),
+    t3: parseInt(document.getElementById('t3').value || '0', 10),
+    t4: parseInt(document.getElementById('t4').value || '0', 10),
+  };
+  fresh.log = fresh.log || [];
+  fresh.log.unshift({zeit: Date.now(), person: personName(), text: 'Einsatzdaten aktualisiert (Status: ' + fresh.status + ')'});
+  await saveRemote(fresh);
+}
+
+async function handleNewEinsatz(){
+  if(!confirm('Neuen Einsatz starten? Der aktuelle Verlauf wird für alle ersetzt.')) return;
+  const fresh = defaultState();
+  if(marker){ map.removeLayer(marker); marker = null; }
+  await saveRemote(fresh);
+}
+
+async function handleAddLog(){
+  const textEl = document.getElementById('logText');
+  const text = textEl.value.trim();
+  if(!text) return;
+  const fresh = (await loadRemote()) || state || defaultState();
+  fresh.log = fresh.log || [];
+  fresh.log.unshift({zeit: Date.now(), person: personName(), text});
+  await saveRemote(fresh);
+  textEl.value = '';
+}
+
+// --- Polling ---
+async function poll(){
+  setSyncStatus('stale');
+  const remote = await loadRemote();
+  if(remote){
+    state = remote;
+    renderAll();
+  } else if(!state){
+    state = defaultState();
+    renderAll();
+  } else {
+    setSyncStatus('ok');
+  }
+}
+
+function startPolling(){
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(poll, POLL_MS);
+}
+
+// --- Init ---
+document.getElementById('btnSaveEinsatz').addEventListener('click', handleSaveEinsatz);
+document.getElementById('btnNewEinsatz').addEventListener('click', handleNewEinsatz);
+document.getElementById('btnAddLog').addEventListener('click', handleAddLog);
+document.getElementById('personName').addEventListener('change', () => {
+  try{ window.storage.set('einsatz-personname', document.getElementById('personName').value, false); }catch(e){}
+});
+
+(async function init(){
+  initMap();
+  try{
+    const savedName = await window.storage.get('einsatz-personname', false);
+    if(savedName && savedName.value) document.getElementById('personName').value = savedName.value;
+  }catch(e){}
+
+  const remote = await loadRemote();
+  state = remote || defaultState();
+  if(!remote){ await saveRemote(state); } else { renderAll(); }
+  startPolling();
+})();
+</script>
+</body>
+</html>
