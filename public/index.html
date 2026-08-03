@@ -179,6 +179,8 @@
       <h2>Einsatz</h2>
       <label for="einsatzOrt">Einsatzort</label>
       <input type="text" id="einsatzOrt" placeholder="Adresse / Ortsbezeichnung">
+      <label for="elsNummer">ELS-Nummer</label>
+      <input type="text" id="elsNummer" placeholder="Einsatzleitsystem-Nr.">
       <div class="row2">
         <div>
           <label for="status">Status</label>
@@ -673,6 +675,7 @@ function renderAll(){
   if(!state) return;
   document.getElementById('einsatzIdLabel').textContent = state.id + (state.ort ? ' — ' + state.ort : '');
   setInputValue('einsatzOrt', state.ort || '');
+  setInputValue('elsNummer', state.elsNummer || '');
   setInputValue('status', state.status || 'Vor Ort');
   setInputValue('anzahlPatienten', state.anzahlPatienten ?? 0);
   setInputValue('t1', state.triage?.t1 ?? 0);
@@ -746,6 +749,7 @@ function escapeHtml(s){
 function handleSaveEinsatz(){
   wsSend('einsatz:update', {
     ort: document.getElementById('einsatzOrt').value,
+    elsNummer: document.getElementById('elsNummer').value,
     status: document.getElementById('status').value,
     anzahlPatienten: parseInt(document.getElementById('anzahlPatienten').value || '0', 10),
   });

@@ -31,6 +31,7 @@ function defaultState() {
   return {
     id: "E-" + Date.now().toString(36).toUpperCase(),
     ort: "",
+    elsNummer: "",
     status: "Vor Ort",
     anzahlPatienten: 0,
     triage: { t1: 0, t2: 0, t3: 0, t4: 0 },
@@ -82,6 +83,9 @@ function applyMutation(state, msg, kuerzel) {
     case "einsatz:update": {
       if (typeof payload.ort === "string") {
         state.ort = payload.ort.slice(0, 200);
+      }
+      if (typeof payload.elsNummer === "string") {
+        state.elsNummer = payload.elsNummer.trim().slice(0, 50);
       }
       if (STATUS_OPTIONS.includes(payload.status)) {
         state.status = payload.status;
