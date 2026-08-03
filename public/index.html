@@ -157,9 +157,8 @@
 
   .map-pin{width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
     background:var(--pin-color, var(--red));border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5);}
-  .map-badge{min-width:26px;height:26px;padding:0 3px;border:2px solid #2f6fa5;background:#eaf2fa;color:var(--ink);
-    font-weight:700;font-family:var(--mono);font-size:11px;display:flex;align-items:center;justify-content:center;
-    box-shadow:0 1px 3px rgba(0,0,0,0.4);white-space:nowrap;}
+  .map-svg-icon{filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));}
+  .map-svg-icon svg{display:block;}
   .map-label{font-family:var(--mono) !important;font-weight:700 !important;font-size:11px !important;
     background:rgba(255,255,255,0.92) !important;border:1px solid var(--line) !important;color:var(--ink) !important;
     padding:2px 6px !important;box-shadow:none !important;}
@@ -283,6 +282,10 @@
         <div><label>T2 (gelb)</label><input type="number" id="t2" min="0" value="0"></div>
         <div><label>T3 (grün)</label><input type="number" id="t3" min="0" value="0"></div>
         <div><label>T4 (blau)</label><input type="number" id="t4" min="0" value="0"></div>
+      </div>
+      <div class="row2">
+        <div><label>Weiss (unverletzt)</label><input type="number" id="weiss" min="0" value="0"></div>
+        <div></div>
       </div>
       <div style="margin-top:12px;">
         <button id="btnSaveTriage">Speichern</button>
@@ -499,24 +502,70 @@ const MARKER_LABELS = {
   kommandoposten: 'Standort Einsatzleitung',
   sammelstelleunverletzte: 'Sammelstelle Unverletzte',
 };
-const MARKER_BADGES = {
-  rettungsachse: 'R',
-  warteraum: 'W',
-  helilandeplatz: 'H',
-  patientensammelstelle: 'P',
-  sanitaetshilfsstelle: 'SH',
-  kommandoposten: 'EL',
-  sammelstelleunverletzte: 'SU',
+// Symbole 1:1 aus dem kantonalen Einsatzbehelf (Zeichenerklaerung "Erste
+// Absprache") bzw. der Checkliste Chef Transport nachgebaut, statt
+// generischer Buchstaben-Badges. Farbe per Pipette aus den PDF-Grafiken:
+// rgb(14,136,211).
+const ICON_BLUE = '#0e88d3';
+const MARKER_SVG = {
+  patientensammelstelle: `<svg viewBox="0 0 24 28" width="100%" height="100%">
+    <rect x="2" y="2" width="20" height="24" rx="2" fill="#fff" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+    <line x1="12" y1="2" x2="12" y2="26" stroke="${ICON_BLUE}" stroke-width="2"/>
+    <line x1="2" y1="14" x2="22" y2="14" stroke="${ICON_BLUE}" stroke-width="2"/>
+  </svg>`,
+  sanitaetshilfsstelle: `<svg viewBox="0 0 24 28" width="100%" height="100%">
+    <rect x="2" y="2" width="20" height="24" rx="2" fill="#fff" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+    <line x1="12" y1="2" x2="12" y2="12" stroke="${ICON_BLUE}" stroke-width="2"/>
+    <line x1="12" y1="16" x2="12" y2="26" stroke="${ICON_BLUE}" stroke-width="2"/>
+    <rect x="2" y="12.5" width="20" height="3" fill="${ICON_BLUE}"/>
+  </svg>`,
+  sammelstelleunverletzte: `<svg viewBox="0 0 22 28" width="100%" height="100%">
+    <rect x="2" y="2" width="18" height="24" rx="2" fill="#fff" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+    <rect x="2" y="12.5" width="18" height="3" fill="${ICON_BLUE}"/>
+  </svg>`,
+  warteraum: `<svg viewBox="0 0 24 28" width="100%" height="100%">
+    <rect x="2" y="2" width="20" height="24" rx="2" fill="#fff" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+    <text x="12" y="19" font-family="Consolas, monospace" font-weight="700" font-size="14" fill="${ICON_BLUE}" text-anchor="middle">W</text>
+  </svg>`,
+  helilandeplatz: `<svg viewBox="0 0 24 28" width="100%" height="100%">
+    <rect x="2" y="2" width="20" height="24" rx="2" fill="#eaf2fa" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+    <text x="12" y="19" font-family="Consolas, monospace" font-weight="700" font-size="16" fill="${ICON_BLUE}" text-anchor="middle">&#8734;</text>
+  </svg>`,
+  kommandoposten: `<svg viewBox="0 0 20 32" width="100%" height="100%">
+    <line x1="6" y1="2" x2="6" y2="24" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+    <line x1="6" y1="2" x2="16" y2="2" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+    <line x1="6" y1="11" x2="14" y2="11" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+    <line x1="6" y1="20" x2="16" y2="20" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+    <circle cx="6" cy="27" r="4" fill="#fff" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+  </svg>`,
+  rettungsachse: `<svg viewBox="0 0 34 22" width="100%" height="100%">
+    <line x1="1" y1="11" x2="7" y2="11" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+    <text x="15" y="16" font-family="Consolas, monospace" font-weight="700" font-size="14" fill="${ICON_BLUE}" text-anchor="middle">R</text>
+    <line x1="21" y1="11" x2="25" y2="11" stroke="${ICON_BLUE}" stroke-width="2.5"/>
+    <polygon points="25,5 25,17 33,11" fill="${ICON_BLUE}"/>
+  </svg>`,
+};
+// [Breite, Hoehe] und Ankerpunkt (der Punkt auf der Karte, den das Icon
+// markiert) je Symbol - passend zur jeweiligen viewBox oben.
+const MARKER_ICON_GEOMETRY = {
+  patientensammelstelle: { size: [24,28], anchor: [12,14] },
+  sanitaetshilfsstelle: { size: [24,28], anchor: [12,14] },
+  sammelstelleunverletzte: { size: [22,28], anchor: [11,14] },
+  warteraum: { size: [24,28], anchor: [12,14] },
+  helilandeplatz: { size: [24,28], anchor: [12,14] },
+  kommandoposten: { size: [20,32], anchor: [6,27] },
+  rettungsachse: { size: [34,22], anchor: [17,11] },
 };
 
 function googleMapsNavUrl(lat, lng){
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
-function navPopupHtml(lat, lng){
-  return `<a href="${googleMapsNavUrl(lat,lng)}" target="_blank" rel="noopener">In Google Maps navigieren</a>`;
+function navPopupHtml(label, lat, lng){
+  const heading = label ? `<strong>${label}</strong><br>` : '';
+  return `${heading}<a href="${googleMapsNavUrl(lat,lng)}" target="_blank" rel="noopener">In Google Maps navigieren</a>`;
 }
-function attachNavPopup(m, lat, lng){
-  const html = navPopupHtml(lat, lng);
+function attachNavPopup(m, label, lat, lng){
+  const html = navPopupHtml(label, lat, lng);
   if(m.getPopup()){ m.setPopupContent(html); }
   else { m.bindPopup(html); }
 }
@@ -529,16 +578,17 @@ function makePinIcon(color){
     iconAnchor: [10,20],
   });
 }
-function makeBadgeIcon(letter){
+function makeSvgIcon(key){
+  const geo = MARKER_ICON_GEOMETRY[key];
   return L.divIcon({
-    className: 'map-badge-icon',
-    html: `<div class="map-badge">${letter}</div>`,
-    iconSize: [26,26],
-    iconAnchor: [13,13],
+    className: 'map-svg-icon',
+    html: MARKER_SVG[key],
+    iconSize: geo.size,
+    iconAnchor: geo.anchor,
   });
 }
 function iconForMarkerType(key){
-  return key === 'einsatzort' ? makePinIcon('var(--red)') : makeBadgeIcon(MARKER_BADGES[key]);
+  return key === 'einsatzort' ? makePinIcon('var(--red)') : makeSvgIcon(key);
 }
 
 function initMap(){
@@ -574,13 +624,12 @@ function placeBereitstellungsortMarker(lat, lng){
     marker.setLatLng([lat,lng]);
   } else {
     marker = L.marker([lat,lng], {draggable:true}).addTo(map);
-    marker.bindTooltip('Bereitstellungsort', {permanent:true, direction:'top', className:'map-label', offset:[0,-30]});
     marker.on('dragend', () => {
       const p = marker.getLatLng();
       wsSend('bereitstellungsort:set', {lat: p.lat, lng: p.lng});
     });
   }
-  attachNavPopup(marker, lat, lng);
+  attachNavPopup(marker, 'Bereitstellungsort', lat, lng);
 }
 
 function setBereitstellungsort(lat, lng){
@@ -594,13 +643,18 @@ function placeMarker(key, lat, lng){
     markerRefs[key].setLatLng([lat,lng]);
   } else {
     markerRefs[key] = L.marker([lat,lng], {icon: iconForMarkerType(key), draggable:true}).addTo(map);
-    markerRefs[key].bindTooltip(MARKER_LABELS[key], {permanent:true, direction:'top', className:'map-label', offset:[0,-14]});
+    // Nur der Einsatzort bleibt dauerhaft beschriftet, alle anderen Pins
+    // zeigen ihre Bezeichnung erst im Popup beim Anklicken - sonst wird die
+    // Karte mit vielen Markern zu unuebersichtlich.
+    if(key === 'einsatzort'){
+      markerRefs[key].bindTooltip(MARKER_LABELS[key], {permanent:true, direction:'top', className:'map-label', offset:[0,-14]});
+    }
     markerRefs[key].on('dragend', () => {
       const p = markerRefs[key].getLatLng();
       setMarker(key, p.lat, p.lng);
     });
   }
-  attachNavPopup(markerRefs[key], lat, lng);
+  attachNavPopup(markerRefs[key], MARKER_LABELS[key], lat, lng);
 }
 
 function setMarker(key, lat, lng){
@@ -727,6 +781,7 @@ function renderAll(){
   setInputValue('t2', state.triage?.t2 ?? 0);
   setInputValue('t3', state.triage?.t3 ?? 0);
   setInputValue('t4', state.triage?.t4 ?? 0);
+  setInputValue('weiss', state.triage?.weiss ?? 0);
 
   const fu = state.fuehrung || {};
   setInputValue('fGel', fu.gel || '');
@@ -806,6 +861,7 @@ function handleSaveTriage(){
     t2: parseInt(document.getElementById('t2').value || '0', 10),
     t3: parseInt(document.getElementById('t3').value || '0', 10),
     t4: parseInt(document.getElementById('t4').value || '0', 10),
+    weiss: parseInt(document.getElementById('weiss').value || '0', 10),
   });
 }
 

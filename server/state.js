@@ -34,7 +34,7 @@ function defaultState() {
     elsNummer: "",
     status: "Vor Ort",
     anzahlPatienten: 0,
-    triage: { t1: 0, t2: 0, t3: 0, t4: 0 },
+    triage: { t1: 0, t2: 0, t3: 0, t4: 0, weiss: 0 },
     bereitstellungsort: null, // {lat, lng}
     markers: {
       einsatzort: null,
@@ -99,6 +99,7 @@ function applyMutation(state, msg, kuerzel) {
         t2: clampInt(payload.triage?.t2, state.triage.t2),
         t3: clampInt(payload.triage?.t3, state.triage.t3),
         t4: clampInt(payload.triage?.t4, state.triage.t4),
+        weiss: clampInt(payload.triage?.weiss, state.triage.weiss),
       };
       addLog(state, kuerzel, "Einsatzdaten aktualisiert (Status: " + state.status + ")");
       break;
@@ -115,11 +116,12 @@ function applyMutation(state, msg, kuerzel) {
         t2: clampInt(payload.t2, state.triage.t2),
         t3: clampInt(payload.t3, state.triage.t3),
         t4: clampInt(payload.t4, state.triage.t4),
+        weiss: clampInt(payload.weiss, state.triage.weiss),
       };
       addLog(
         state,
         kuerzel,
-        `Sichtungskategorien aktualisiert: T1=${state.triage.t1}, T2=${state.triage.t2}, T3=${state.triage.t3}, T4=${state.triage.t4}`
+        `Sichtungskategorien aktualisiert: T1=${state.triage.t1}, T2=${state.triage.t2}, T3=${state.triage.t3}, T4=${state.triage.t4}, Weiss=${state.triage.weiss}`
       );
       break;
     }
