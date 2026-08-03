@@ -2,6 +2,7 @@ const { WebSocketServer } = require("ws");
 const { verifyToken } = require("./auth");
 const { loadState, saveState } = require("./db");
 const { defaultState, applyMutation } = require("./state");
+const { reverseGeocode } = require("./geocode");
 
 function createWsHub(server) {
   let state = loadState() || defaultState();
@@ -47,7 +48,7 @@ function createWsHub(server) {
     clients.add(ws);
     send(ws, "state:full", state);
 
-    ws.on("message", (raw) => {
+    ws.on("message", async (raw) => {
       let msg;
       try {
         msg = JSON.parse(raw.toString());
@@ -56,6 +57,10 @@ function createWsHub(server) {
         return;
       }
       try {
+        if (msg.type === "marker:set" && msg.payload?.key === "einsatzort") {
+          const address = await reverseGeocode(msg.payload.lat, msg.payload.lng);
+          msg = { ...msg, payload: { ...msg.payload, address } };
+        }
         state = applyMutation(state, msg, ws.kuerzel);
         broadcastState();
       } catch (e) {

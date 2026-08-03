@@ -24,6 +24,8 @@ Danach `http://localhost:3000` oeffnen und mit Kuerzel + PIN anmelden.
 - `server/state.js` - Reine Zustandslogik (Default-Zustand, Mutationen)
 - `server/db.js` - Persistenz in SQLite (`better-sqlite3`)
 - `server/auth.js` - Login gegen geteiltes PIN, signiert JWT-Tokens
+- `server/geocode.js` - Reverse-Geocoding (Koordinaten -> Adresse) ueber
+  OpenStreetMap Nominatim, fuer den Einsatzort-Marker
 - `public/index.html` - Frontend (Login-Screen + Live-Ansicht)
 
 Der Server ist die alleinige Quelle der Wahrheit: Clients senden nur Absichten

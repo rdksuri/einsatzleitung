@@ -93,6 +93,31 @@
     padding:6px 10px;font-size:11px;font-family:var(--mono);
   }
 
+  .marker-toolbar{
+    position:absolute;top:10px;right:10px;z-index:1000;
+    display:flex;flex-direction:column;gap:4px;
+    background:rgba(255,255,255,0.92);border:1px solid var(--line);
+    padding:6px;
+  }
+  .marker-btn{
+    font-family:var(--mono);font-weight:700;font-size:11px;text-transform:none;letter-spacing:0;
+    padding:6px 10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    cursor:pointer;text-align:left;display:flex;align-items:center;gap:6px;
+  }
+  .marker-btn .swatch{width:10px;height:10px;flex:0 0 auto;border:1px solid rgba(0,0,0,0.3);}
+  .marker-btn.active{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+  .marker-btn.active .swatch{border-color:rgba(255,255,255,0.6);}
+  .marker-btn:hover{filter:brightness(1.05);}
+
+  .map-pin{width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+    background:var(--pin-color, var(--red));border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5);}
+  .map-badge{width:26px;height:26px;border:2px solid #2f6fa5;background:#eaf2fa;color:var(--ink);
+    font-weight:700;font-family:var(--mono);font-size:13px;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 1px 3px rgba(0,0,0,0.4);}
+  .map-label{font-family:var(--mono) !important;font-weight:700 !important;font-size:11px !important;
+    background:rgba(255,255,255,0.92) !important;border:1px solid var(--line) !important;color:var(--ink) !important;
+    padding:2px 6px !important;box-shadow:none !important;}
+
   .log{display:flex;flex-direction:column;gap:0;}
   .log-entry{border-bottom:1px solid var(--line);padding:10px 0;}
   .log-entry:last-child{border-bottom:none;}
@@ -184,7 +209,10 @@
         <div><label>T3 (grün)</label><input type="number" id="t3" min="0" value="0"></div>
         <div><label>T4 (blau)</label><input type="number" id="t4" min="0" value="0"></div>
       </div>
-      <div class="field-note">Wird mit „Speichern" oben übernommen.</div>
+      <div style="margin-top:12px;">
+        <button id="btnSaveTriage">Speichern</button>
+      </div>
+      <div class="field-note">Wer die Anzahl anpasst, wird im Verlauf protokolliert.</div>
     </div>
 
     <div class="card">
@@ -199,7 +227,14 @@
 
   <div class="map-wrap">
     <div id="map"></div>
-    <div class="map-hint">Klick auf Karte = Bereitstellungsort setzen/verschieben</div>
+    <div class="map-hint" id="mapHint">Klick auf Karte = Bereitstellungsort setzen/verschieben</div>
+    <div class="marker-toolbar" id="markerToolbar">
+      <button type="button" class="marker-btn active" data-marker="bereitstellungsort"><span class="swatch" style="background:#3388ff;"></span>Bereitstellungsort</button>
+      <button type="button" class="marker-btn" data-marker="einsatzort"><span class="swatch" style="background:var(--red);"></span>Einsatzort</button>
+      <button type="button" class="marker-btn" data-marker="rettungsachse"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Rettungsachse</button>
+      <button type="button" class="marker-btn" data-marker="warteraum"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Warteraum</button>
+      <button type="button" class="marker-btn" data-marker="helilandeplatz"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Heli-Landeplatz</button>
+    </div>
     <div class="coord" id="coordLabel">Bereitstellungsort: nicht gesetzt</div>
   </div>
 </main>
@@ -219,6 +254,8 @@ const RECONNECT_MAX_MS = 15000;
 
 let state = null;
 let map, marker;
+let markerRefs = {}; // key -> Leaflet marker instance (einsatzort, rettungsachse, warteraum, helilandeplatz)
+let activeMarkerType = 'bereitstellungsort';
 let ws = null;
 let reconnectAttempts = 0;
 let reconnectTimer = null;
@@ -349,6 +386,38 @@ function setSyncStatus(kind){
 // --- Map ---
 let mapReady = false;
 
+const MARKER_LABELS = {
+  einsatzort: 'Einsatzort',
+  rettungsachse: 'Rettungsachse',
+  warteraum: 'Warteraum',
+  helilandeplatz: 'Heli-Landeplatz',
+};
+const MARKER_BADGES = {
+  rettungsachse: 'R',
+  warteraum: 'W',
+  helilandeplatz: 'H',
+};
+
+function makePinIcon(color){
+  return L.divIcon({
+    className: 'map-pin-icon',
+    html: `<div class="map-pin" style="--pin-color:${color}"></div>`,
+    iconSize: [20,20],
+    iconAnchor: [10,20],
+  });
+}
+function makeBadgeIcon(letter){
+  return L.divIcon({
+    className: 'map-badge-icon',
+    html: `<div class="map-badge">${letter}</div>`,
+    iconSize: [26,26],
+    iconAnchor: [13,13],
+  });
+}
+function iconForMarkerType(key){
+  return key === 'einsatzort' ? makePinIcon('var(--red)') : makeBadgeIcon(MARKER_BADGES[key]);
+}
+
 function initMap(){
   try{
     map = L.map('map', {zoomControl:true}).setView([46.8800, 8.6350], 12); // Kanton Uri als Default-Zentrum
@@ -358,12 +427,16 @@ function initMap(){
     }).addTo(map);
 
     map.on('click', (e) => {
-      setBereitstellungsort(e.latlng.lat, e.latlng.lng);
+      if(activeMarkerType === 'bereitstellungsort'){
+        setBereitstellungsort(e.latlng.lat, e.latlng.lng);
+      } else {
+        setMarker(activeMarkerType, e.latlng.lat, e.latlng.lng);
+      }
     });
     mapReady = true;
   }catch(e){
     console.error('Karte konnte nicht geladen werden:', e);
-    const hint = document.querySelector('.map-hint');
+    const hint = document.getElementById('mapHint');
     if(hint) hint.textContent = 'Karte nicht verfügbar (Verbindungsproblem).';
   }
 }
@@ -374,6 +447,7 @@ function setBereitstellungsort(lat, lng){
       marker.setLatLng([lat,lng]);
     } else {
       marker = L.marker([lat,lng], {draggable:true}).addTo(map);
+      marker.bindTooltip('Bereitstellungsort', {permanent:true, direction:'top', className:'map-label', offset:[0,-30]});
       marker.on('dragend', () => {
         const p = marker.getLatLng();
         wsSend('bereitstellungsort:set', {lat: p.lat, lng: p.lng});
@@ -383,17 +457,64 @@ function setBereitstellungsort(lat, lng){
   wsSend('bereitstellungsort:set', {lat, lng});
 }
 
+function placeMarker(key, lat, lng){
+  if(!mapReady) return;
+  if(markerRefs[key]){
+    markerRefs[key].setLatLng([lat,lng]);
+  } else {
+    markerRefs[key] = L.marker([lat,lng], {icon: iconForMarkerType(key), draggable:true}).addTo(map);
+    markerRefs[key].bindTooltip(MARKER_LABELS[key], {permanent:true, direction:'top', className:'map-label', offset:[0,-14]});
+    markerRefs[key].on('dragend', () => {
+      const p = markerRefs[key].getLatLng();
+      setMarker(key, p.lat, p.lng);
+    });
+  }
+}
+
+function setMarker(key, lat, lng){
+  placeMarker(key, lat, lng); // optimistisch sofort anzeigen, Server bestaetigt/korrigiert per Broadcast
+  wsSend('marker:set', {key, lat, lng});
+}
+
+function setActiveMarkerType(type){
+  activeMarkerType = type;
+  document.querySelectorAll('.marker-btn').forEach(b => b.classList.toggle('active', b.dataset.marker === type));
+  const label = type === 'bereitstellungsort' ? 'Bereitstellungsort' : MARKER_LABELS[type];
+  const hint = document.getElementById('mapHint');
+  if(hint) hint.textContent = 'Klick auf Karte = ' + label + ' setzen/verschieben';
+}
+
 // --- Render ---
+// Merkt sich pro Feld den zuletzt vom Server uebernommenen Wert. So kann
+// renderAll() erkennen, ob der Nutzer das Feld seither selbst veraendert hat
+// (z.B. Triage-Werte eingetippt, aber noch nicht gespeichert) und diese
+// ungespeicherte Eingabe nicht durch einen unabhaengigen Broadcast ueberschreiben
+// (z.B. wenn jemand ueber den anderen Speichern-Button oder einen Log-Eintrag
+// eine neue state:full-Nachricht ausloest).
+const lastServerValues = {};
+function setInputValue(id, value){
+  const el = document.getElementById(id);
+  const strValue = String(value);
+  const isDirty = lastServerValues[id] !== undefined && el.value !== lastServerValues[id];
+  if(!isDirty){
+    el.value = strValue;
+  }
+  // Baseline immer aktualisieren: sobald die eigene Aenderung gespeichert wurde
+  // (oder verworfen wird), gleicht sich der naechste Vergleich wieder an, statt
+  // das Feld dauerhaft als "dirty" zu betrachten und externe Updates zu blockieren.
+  lastServerValues[id] = strValue;
+}
+
 function renderAll(){
   if(!state) return;
   document.getElementById('einsatzIdLabel').textContent = state.id + (state.ort ? ' — ' + state.ort : '');
-  document.getElementById('einsatzOrt').value = state.ort || '';
-  document.getElementById('status').value = state.status || 'Vor Ort';
-  document.getElementById('anzahlPatienten').value = state.anzahlPatienten ?? 0;
-  document.getElementById('t1').value = state.triage?.t1 ?? 0;
-  document.getElementById('t2').value = state.triage?.t2 ?? 0;
-  document.getElementById('t3').value = state.triage?.t3 ?? 0;
-  document.getElementById('t4').value = state.triage?.t4 ?? 0;
+  setInputValue('einsatzOrt', state.ort || '');
+  setInputValue('status', state.status || 'Vor Ort');
+  setInputValue('anzahlPatienten', state.anzahlPatienten ?? 0);
+  setInputValue('t1', state.triage?.t1 ?? 0);
+  setInputValue('t2', state.triage?.t2 ?? 0);
+  setInputValue('t3', state.triage?.t3 ?? 0);
+  setInputValue('t4', state.triage?.t4 ?? 0);
 
   if(state.bereitstellungsort){
     const {lat,lng} = state.bereitstellungsort;
@@ -407,6 +528,16 @@ function renderAll(){
   } else {
     if(mapReady && marker){ map.removeLayer(marker); marker = null; }
     document.getElementById('coordLabel').textContent = 'Bereitstellungsort: nicht gesetzt';
+  }
+
+  for(const key of Object.keys(MARKER_LABELS)){
+    const pos = state.markers && state.markers[key];
+    if(pos){
+      placeMarker(key, pos.lat, pos.lng);
+    } else if(mapReady && markerRefs[key]){
+      map.removeLayer(markerRefs[key]);
+      delete markerRefs[key];
+    }
   }
 
   const list = document.getElementById('logList');
@@ -433,12 +564,15 @@ function handleSaveEinsatz(){
     ort: document.getElementById('einsatzOrt').value,
     status: document.getElementById('status').value,
     anzahlPatienten: parseInt(document.getElementById('anzahlPatienten').value || '0', 10),
-    triage: {
-      t1: parseInt(document.getElementById('t1').value || '0', 10),
-      t2: parseInt(document.getElementById('t2').value || '0', 10),
-      t3: parseInt(document.getElementById('t3').value || '0', 10),
-      t4: parseInt(document.getElementById('t4').value || '0', 10),
-    }
+  });
+}
+
+function handleSaveTriage(){
+  wsSend('triage:update', {
+    t1: parseInt(document.getElementById('t1').value || '0', 10),
+    t2: parseInt(document.getElementById('t2').value || '0', 10),
+    t3: parseInt(document.getElementById('t3').value || '0', 10),
+    t4: parseInt(document.getElementById('t4').value || '0', 10),
   });
 }
 
@@ -457,11 +591,15 @@ function handleAddLog(){
 
 // --- Init ---
 document.getElementById('btnSaveEinsatz').addEventListener('click', handleSaveEinsatz);
+document.getElementById('btnSaveTriage').addEventListener('click', handleSaveTriage);
 document.getElementById('btnNewEinsatz').addEventListener('click', handleNewEinsatz);
 document.getElementById('btnAddLog').addEventListener('click', handleAddLog);
 document.getElementById('btnLogin').addEventListener('click', handleLogin);
 document.getElementById('btnLogout').addEventListener('click', handleLogout);
 document.getElementById('loginPin').addEventListener('keydown', (e) => { if(e.key === 'Enter') handleLogin(); });
+document.querySelectorAll('.marker-btn').forEach(btn => {
+  btn.addEventListener('click', () => setActiveMarkerType(btn.dataset.marker));
+});
 
 (function init(){
   initMap();

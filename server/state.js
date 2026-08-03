@@ -1,3 +1,10 @@
+const MARKER_LABELS = {
+  einsatzort: "Einsatzort",
+  rettungsachse: "Rettungsachse",
+  warteraum: "Warteraum",
+  helilandeplatz: "Heli-Landeplatz",
+};
+
 function defaultState() {
   return {
     id: "E-" + Date.now().toString(36).toUpperCase(),
@@ -6,6 +13,7 @@ function defaultState() {
     anzahlPatienten: 0,
     triage: { t1: 0, t2: 0, t3: 0, t4: 0 },
     bereitstellungsort: null, // {lat, lng}
+    markers: { einsatzort: null, rettungsachse: null, warteraum: null, helilandeplatz: null }, // je {lat, lng}
     log: [],
     updatedAt: Date.now(),
   };
@@ -64,6 +72,51 @@ function applyMutation(state, msg, kuerzel) {
       break;
     }
 
+    case "triage:update": {
+      state.triage = {
+        t1: clampInt(payload.t1, state.triage.t1),
+        t2: clampInt(payload.t2, state.triage.t2),
+        t3: clampInt(payload.t3, state.triage.t3),
+        t4: clampInt(payload.t4, state.triage.t4),
+      };
+      addLog(
+        state,
+        kuerzel,
+        `Sichtungskategorien aktualisiert: T1=${state.triage.t1}, T2=${state.triage.t2}, T3=${state.triage.t3}, T4=${state.triage.t4}`
+      );
+      break;
+    }
+
+    // Generalisierte Kartenmarker: Einsatzort sowie die taktischen Symbole
+    // aus der Checkliste Chef Transport (Rettungsachse, Warteraum,
+    // Heli-Landeplatz). Bereitstellungsort bleibt als eigener Mutationstyp
+    // bestehen (siehe unten), da er schon vorher existierte.
+    case "marker:set": {
+      const key = payload.key;
+      if (!Object.prototype.hasOwnProperty.call(MARKER_LABELS, key)) {
+        throw new Error("Unbekannter Markertyp: " + key);
+      }
+      const lat = Number(payload.lat);
+      const lng = Number(payload.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        throw new Error("Ungültige Koordinaten");
+      }
+      const pos = { lat: +lat.toFixed(6), lng: +lng.toFixed(6) };
+      state.markers = state.markers || {};
+      state.markers[key] = pos;
+
+      if (key === "einsatzort") {
+        const address =
+          String(payload.address || "").trim().slice(0, 300) ||
+          pos.lat + ", " + pos.lng;
+        state.ort = address;
+        addLog(state, kuerzel, "Einsatzort gesetzt: " + address);
+      } else {
+        addLog(state, kuerzel, MARKER_LABELS[key] + " markiert: " + pos.lat + ", " + pos.lng);
+      }
+      break;
+    }
+
     case "bereitstellungsort:set": {
       const lat = Number(payload.lat);
       const lng = Number(payload.lng);
@@ -100,4 +153,4 @@ function applyMutation(state, msg, kuerzel) {
   return state;
 }
 
-module.exports = { defaultState, applyMutation, STATUS_OPTIONS };
+module.exports = { defaultState, applyMutation, STATUS_OPTIONS, MARKER_LABELS };
