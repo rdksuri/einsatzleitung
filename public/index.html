@@ -111,9 +111,9 @@
 
   .map-pin{width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
     background:var(--pin-color, var(--red));border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5);}
-  .map-badge{width:26px;height:26px;border:2px solid #2f6fa5;background:#eaf2fa;color:var(--ink);
-    font-weight:700;font-family:var(--mono);font-size:13px;display:flex;align-items:center;justify-content:center;
-    box-shadow:0 1px 3px rgba(0,0,0,0.4);}
+  .map-badge{min-width:26px;height:26px;padding:0 3px;border:2px solid #2f6fa5;background:#eaf2fa;color:var(--ink);
+    font-weight:700;font-family:var(--mono);font-size:11px;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 1px 3px rgba(0,0,0,0.4);white-space:nowrap;}
   .map-label{font-family:var(--mono) !important;font-weight:700 !important;font-size:11px !important;
     background:rgba(255,255,255,0.92) !important;border:1px solid var(--line) !important;color:var(--ink) !important;
     padding:2px 6px !important;box-shadow:none !important;}
@@ -234,6 +234,10 @@
       <button type="button" class="marker-btn" data-marker="rettungsachse"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Rettungsachse</button>
       <button type="button" class="marker-btn" data-marker="warteraum"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Warteraum</button>
       <button type="button" class="marker-btn" data-marker="helilandeplatz"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Heli-Landeplatz</button>
+      <button type="button" class="marker-btn" data-marker="patientensammelstelle"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Patientensammelstelle</button>
+      <button type="button" class="marker-btn" data-marker="sanitaetshilfsstelle"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Sanitätshilfsstelle</button>
+      <button type="button" class="marker-btn" data-marker="kommandoposten"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Standort Einsatzleitung</button>
+      <button type="button" class="marker-btn" data-marker="sammelstelleunverletzte"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Sammelstelle Unverletzte</button>
     </div>
     <div class="coord" id="coordLabel">Bereitstellungsort: nicht gesetzt</div>
   </div>
@@ -391,12 +395,32 @@ const MARKER_LABELS = {
   rettungsachse: 'Rettungsachse',
   warteraum: 'Warteraum',
   helilandeplatz: 'Heli-Landeplatz',
+  patientensammelstelle: 'Patientensammelstelle',
+  sanitaetshilfsstelle: 'Sanitätshilfsstelle/Transportstelle',
+  kommandoposten: 'Standort Einsatzleitung',
+  sammelstelleunverletzte: 'Sammelstelle Unverletzte',
 };
 const MARKER_BADGES = {
   rettungsachse: 'R',
   warteraum: 'W',
   helilandeplatz: 'H',
+  patientensammelstelle: 'P',
+  sanitaetshilfsstelle: 'SH',
+  kommandoposten: 'EL',
+  sammelstelleunverletzte: 'SU',
 };
+
+function googleMapsNavUrl(lat, lng){
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+}
+function navPopupHtml(lat, lng){
+  return `<a href="${googleMapsNavUrl(lat,lng)}" target="_blank" rel="noopener">In Google Maps navigieren</a>`;
+}
+function attachNavPopup(m, lat, lng){
+  const html = navPopupHtml(lat, lng);
+  if(m.getPopup()){ m.setPopupContent(html); }
+  else { m.bindPopup(html); }
+}
 
 function makePinIcon(color){
   return L.divIcon({
@@ -441,19 +465,23 @@ function initMap(){
   }
 }
 
-function setBereitstellungsort(lat, lng){
-  if(mapReady){
-    if(marker){
-      marker.setLatLng([lat,lng]);
-    } else {
-      marker = L.marker([lat,lng], {draggable:true}).addTo(map);
-      marker.bindTooltip('Bereitstellungsort', {permanent:true, direction:'top', className:'map-label', offset:[0,-30]});
-      marker.on('dragend', () => {
-        const p = marker.getLatLng();
-        wsSend('bereitstellungsort:set', {lat: p.lat, lng: p.lng});
-      });
-    }
+function placeBereitstellungsortMarker(lat, lng){
+  if(!mapReady) return;
+  if(marker){
+    marker.setLatLng([lat,lng]);
+  } else {
+    marker = L.marker([lat,lng], {draggable:true}).addTo(map);
+    marker.bindTooltip('Bereitstellungsort', {permanent:true, direction:'top', className:'map-label', offset:[0,-30]});
+    marker.on('dragend', () => {
+      const p = marker.getLatLng();
+      wsSend('bereitstellungsort:set', {lat: p.lat, lng: p.lng});
+    });
   }
+  attachNavPopup(marker, lat, lng);
+}
+
+function setBereitstellungsort(lat, lng){
+  placeBereitstellungsortMarker(lat, lng);
   wsSend('bereitstellungsort:set', {lat, lng});
 }
 
@@ -469,6 +497,7 @@ function placeMarker(key, lat, lng){
       setMarker(key, p.lat, p.lng);
     });
   }
+  attachNavPopup(markerRefs[key], lat, lng);
 }
 
 function setMarker(key, lat, lng){
@@ -519,12 +548,7 @@ function renderAll(){
   if(state.bereitstellungsort){
     const {lat,lng} = state.bereitstellungsort;
     document.getElementById('coordLabel').textContent = 'Bereitstellungsort: ' + lat + ', ' + lng;
-    if(mapReady){
-      if(marker){ marker.setLatLng([lat,lng]); }
-      else { marker = L.marker([lat,lng], {draggable:true}).addTo(map);
-        marker.on('dragend', () => { const p = marker.getLatLng(); wsSend('bereitstellungsort:set', {lat: p.lat, lng: p.lng}); });
-      }
-    }
+    placeBereitstellungsortMarker(lat, lng);
   } else {
     if(mapReady && marker){ map.removeLayer(marker); marker = null; }
     document.getElementById('coordLabel').textContent = 'Bereitstellungsort: nicht gesetzt';
@@ -540,18 +564,31 @@ function renderAll(){
     }
   }
 
+  renderLog();
+}
+
+const LOG_COLLAPSED_COUNT = 4;
+let logExpanded = false;
+
+function renderLog(){
   const list = document.getElementById('logList');
-  const entries = state.log || [];
+  const entries = (state && state.log) || [];
   if(entries.length === 0){
     list.innerHTML = '<div class="empty">Noch keine Einträge.</div>';
-  } else {
-    list.innerHTML = entries.map(e => `
+    return;
+  }
+  const visible = logExpanded ? entries : entries.slice(0, LOG_COLLAPSED_COUNT);
+  let html = visible.map(e => `
       <div class="log-entry">
         <div class="meta">${new Date(e.zeit).toLocaleTimeString('de-CH')} · ${escapeHtml(e.person)}</div>
         <div class="text">${escapeHtml(e.text)}</div>
       </div>
     `).join('');
+  if(entries.length > LOG_COLLAPSED_COUNT){
+    const label = logExpanded ? 'Weniger anzeigen' : `Alle anzeigen (${entries.length})`;
+    html += `<button type="button" class="secondary" id="btnToggleLog" style="width:100%;margin-top:10px;">${label}</button>`;
   }
+  list.innerHTML = html;
 }
 
 function escapeHtml(s){
@@ -599,6 +636,12 @@ document.getElementById('btnLogout').addEventListener('click', handleLogout);
 document.getElementById('loginPin').addEventListener('keydown', (e) => { if(e.key === 'Enter') handleLogin(); });
 document.querySelectorAll('.marker-btn').forEach(btn => {
   btn.addEventListener('click', () => setActiveMarkerType(btn.dataset.marker));
+});
+document.getElementById('logList').addEventListener('click', (e) => {
+  if(e.target && e.target.id === 'btnToggleLog'){
+    logExpanded = !logExpanded;
+    renderLog();
+  }
 });
 
 (function init(){

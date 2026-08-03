@@ -3,6 +3,10 @@ const MARKER_LABELS = {
   rettungsachse: "Rettungsachse",
   warteraum: "Warteraum",
   helilandeplatz: "Heli-Landeplatz",
+  patientensammelstelle: "Patientensammelstelle",
+  sanitaetshilfsstelle: "Sanitätshilfsstelle/Transportstelle",
+  kommandoposten: "Standort Einsatzleitung",
+  sammelstelleunverletzte: "Sammelstelle Unverletzte",
 };
 
 function defaultState() {
@@ -13,7 +17,16 @@ function defaultState() {
     anzahlPatienten: 0,
     triage: { t1: 0, t2: 0, t3: 0, t4: 0 },
     bereitstellungsort: null, // {lat, lng}
-    markers: { einsatzort: null, rettungsachse: null, warteraum: null, helilandeplatz: null }, // je {lat, lng}
+    markers: {
+      einsatzort: null,
+      rettungsachse: null,
+      warteraum: null,
+      helilandeplatz: null,
+      patientensammelstelle: null,
+      sanitaetshilfsstelle: null,
+      kommandoposten: null,
+      sammelstelleunverletzte: null,
+    }, // je {lat, lng}
     log: [],
     updatedAt: Date.now(),
   };
