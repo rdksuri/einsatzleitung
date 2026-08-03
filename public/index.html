@@ -52,6 +52,14 @@
        Mobile ganz normal scrollen lassen wie eine gewoehnliche Seite,
        statt mehrere verschachtelte Mini-Scrollboxen zu verschachteln.
      */
+    /* body ist ein Flex-Container mit fixer height:100% - das zwingt ALLE
+       Kinder (Header, main, und den separaten Verlauf-.panel danach) in ein
+       festes Viewport-Budget. Ohne genug Platz quetscht Flexbox das letzte
+       Element (Verlauf) auf einen winzigen Rest zusammen, der dann intern
+       (unsichtbar) scrollt. Fix an der Wurzel: auf Mobile keine feste
+       Seitenhoehe erzwingen, dann verteilt Flexbox nichts mehr und die Seite
+       waechst natuerlich auf ihre Inhaltshoehe. */
+    html, body{height:auto;}
     main{grid-template-columns: 1fr; grid-template-rows:auto auto; flex:none; min-height:auto;}
     .panel{overflow-y:visible; max-height:none; min-width:0;}
   }
