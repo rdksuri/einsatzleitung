@@ -108,6 +108,7 @@
   .marker-btn.active{background:var(--ink);color:var(--paper);border-color:var(--ink);}
   .marker-btn.active .swatch{border-color:rgba(255,255,255,0.6);}
   .marker-btn:hover{filter:brightness(1.05);}
+  .zone-toolbar{top:auto;bottom:50px;left:10px;right:auto;}
 
   .map-pin{width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
     background:var(--pin-color, var(--red));border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5);}
@@ -202,6 +203,33 @@
     </div>
 
     <div class="card">
+      <h2>Führungsstruktur</h2>
+      <div class="row2">
+        <div><label for="fGel">GEL</label><input type="text" id="fGel" maxlength="20"></div>
+        <div><label for="fFu">FU</label><input type="text" id="fFu" maxlength="20"></div>
+      </div>
+      <div class="row2">
+        <div><label for="fBlFw">BL FW</label><input type="text" id="fBlFw" maxlength="20"></div>
+        <div><label for="fBlSan">BL SAN</label><input type="text" id="fBlSan" maxlength="20"></div>
+      </div>
+      <div class="row2">
+        <div><label for="fBlPol">BL POL</label><input type="text" id="fBlPol" maxlength="20"></div>
+        <div><label for="fMedien">Mediendienst</label><input type="text" id="fMedien" maxlength="20"></div>
+      </div>
+      <div class="row2">
+        <div><label for="fElFw">EL FW</label><input type="text" id="fElFw" maxlength="20"></div>
+        <div><label for="fElSan">EL SAN</label><input type="text" id="fElSan" maxlength="20"></div>
+      </div>
+      <div class="row2">
+        <div><label for="fElPol">EL POL</label><input type="text" id="fElPol" maxlength="20"></div>
+        <div></div>
+      </div>
+      <div style="margin-top:12px;">
+        <button id="btnSaveFuehrung">Speichern</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Sichtungskategorien</h2>
       <div class="row2">
         <div><label>T1 (rot)</label><input type="number" id="t1" min="0" value="0"></div>
@@ -223,6 +251,21 @@
       </div>
     </div>
 
+    <div class="card">
+      <details>
+        <summary style="cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--red);font-weight:700;">POLYCOM-Kanäle</summary>
+        <div style="margin-top:10px;font-size:12px;font-family:var(--mono);">
+          <div style="margin-bottom:6px;"><strong>G593 «StrRg UR»</strong><br>Einsatzleiter FW/SAN/POL untereinander</div>
+          <div style="margin-bottom:6px;"><strong>G493 «Fhr UR»</strong><br>Gesamteinsatzleitung ↔ Einsatzleiter</div>
+          <div style="margin-bottom:6px;"><strong>G596 «GSTalle»</strong><br>Kanton TI, Gotthard-Strassentunnel</div>
+          <div style="margin-bottom:6px;"><strong>G598 «K UVG»</strong><br>Kantone GR/VS, Oberalp-/Furkapass</div>
+          <div style="margin-bottom:6px;"><strong>G716 «TUK SBT»</strong><br>Kanton NW, Seelisberg-Strassentunnel</div>
+          <div style="margin-bottom:6px;"><strong>G859 «BORS3ZCH»</strong><br>Zentralschweiz (OW/NW/LU/SZ/ZG), Axenstrasse/Vierwaldstättersee</div>
+          <div><strong>G1551 «FhrGBT»</strong><br>Gotthard-Basistunnel</div>
+        </div>
+      </details>
+    </div>
+
   </div>
 
   <div class="map-wrap">
@@ -240,6 +283,15 @@
       <button type="button" class="marker-btn" data-marker="sammelstelleunverletzte"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Sammelstelle Unverletzte</button>
     </div>
     <div class="coord" id="coordLabel">Bereitstellungsort: nicht gesetzt</div>
+    <div class="marker-toolbar zone-toolbar" id="zoneToolbar">
+      <button type="button" class="marker-btn zone-btn" data-zone="gefahrenzone" style="border-left:4px solid #c8281f;">Gefahrenzone</button>
+      <button type="button" class="marker-btn zone-btn" data-zone="sperrzone" style="border-left:4px solid #e8b923;">Sperrzone</button>
+      <button type="button" class="marker-btn zone-btn" data-zone="verkehrsumleitzone" style="border-left:4px solid #3d6b3a;">Verkehrsumleitzone</button>
+      <div id="zoneDrawControls" style="display:none;gap:4px;">
+        <button type="button" id="btnFinishZone" class="secondary" style="flex:1;">Fertig</button>
+        <button type="button" id="btnCancelZone" class="secondary" style="flex:1;">Abbrechen</button>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -451,6 +503,10 @@ function initMap(){
     }).addTo(map);
 
     map.on('click', (e) => {
+      if(drawingZone){
+        addZonePoint(e.latlng.lat, e.latlng.lng);
+        return;
+      }
       if(activeMarkerType === 'bereitstellungsort'){
         setBereitstellungsort(e.latlng.lat, e.latlng.lng);
       } else {
@@ -505,12 +561,91 @@ function setMarker(key, lat, lng){
   wsSend('marker:set', {key, lat, lng});
 }
 
-function setActiveMarkerType(type){
-  activeMarkerType = type;
-  document.querySelectorAll('.marker-btn').forEach(b => b.classList.toggle('active', b.dataset.marker === type));
-  const label = type === 'bereitstellungsort' ? 'Bereitstellungsort' : MARKER_LABELS[type];
+function refreshMarkerModeUI(){
+  document.querySelectorAll('.marker-btn').forEach(b => b.classList.toggle('active', b.dataset.marker === activeMarkerType));
+  const label = activeMarkerType === 'bereitstellungsort' ? 'Bereitstellungsort' : MARKER_LABELS[activeMarkerType];
   const hint = document.getElementById('mapHint');
   if(hint) hint.textContent = 'Klick auf Karte = ' + label + ' setzen/verschieben';
+}
+
+function setActiveMarkerType(type){
+  cancelZoneDrawing();
+  activeMarkerType = type;
+  refreshMarkerModeUI();
+}
+
+// --- Zonen (Flaechen: Gefahrenzone, Sperrzone, Verkehrsumleitzone) ---
+const ZONE_LABELS = {
+  gefahrenzone: 'Gefahrenzone',
+  sperrzone: 'Sperrzone',
+  verkehrsumleitzone: 'Verkehrsumleitzone',
+};
+const ZONE_COLORS = {
+  gefahrenzone: '#c8281f',
+  sperrzone: '#e8b923',
+  verkehrsumleitzone: '#3d6b3a',
+};
+
+let drawingZone = null; // Zonentyp waehrend des Zeichnens, sonst null
+let drawingPoints = [];
+let drawingPreviewLayer = null;
+let zoneLayers = {}; // key -> L.polygon (fertig eingezeichnete Zonen)
+
+function startZoneDrawing(key){
+  drawingZone = key;
+  drawingPoints = [];
+  if(drawingPreviewLayer){ map.removeLayer(drawingPreviewLayer); drawingPreviewLayer = null; }
+  document.querySelectorAll('.marker-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.zone-btn[data-zone="${key}"]`).classList.add('active');
+  document.getElementById('zoneDrawControls').style.display = 'flex';
+  const hint = document.getElementById('mapHint');
+  if(hint) hint.textContent = ZONE_LABELS[key] + ': Punkte auf der Karte anklicken, dann "Fertig" (mind. 3 Punkte).';
+}
+
+function addZonePoint(lat, lng){
+  drawingPoints.push([lat, lng]);
+  if(drawingPreviewLayer){ map.removeLayer(drawingPreviewLayer); }
+  drawingPreviewLayer = L.polygon(drawingPoints, {color: ZONE_COLORS[drawingZone], fillOpacity:0.25, dashArray:'4,4'}).addTo(map);
+}
+
+function finishZoneDrawing(){
+  if(!drawingZone) return;
+  if(drawingPoints.length < 3){
+    alert('Mindestens 3 Punkte anklicken, um eine Zone abzuschliessen.');
+    return;
+  }
+  wsSend('zone:set', {key: drawingZone, points: drawingPoints.map(([lat,lng]) => ({lat,lng}))});
+  cancelZoneDrawing();
+}
+
+function cancelZoneDrawing(){
+  if(!drawingZone && !drawingPreviewLayer) return;
+  drawingZone = null;
+  drawingPoints = [];
+  if(drawingPreviewLayer){ map.removeLayer(drawingPreviewLayer); drawingPreviewLayer = null; }
+  document.getElementById('zoneDrawControls').style.display = 'none';
+  document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('active'));
+  refreshMarkerModeUI();
+}
+
+function renderZones(){
+  if(!mapReady) return;
+  for(const key of Object.keys(ZONE_LABELS)){
+    const points = state.zones && state.zones[key];
+    if(points && points.length >= 3){
+      const latlngs = points.map(p => [p.lat, p.lng]);
+      if(zoneLayers[key]){
+        zoneLayers[key].setLatLngs(latlngs);
+      } else {
+        zoneLayers[key] = L.polygon(latlngs, {color: ZONE_COLORS[key], fillColor: ZONE_COLORS[key], fillOpacity:0.25, weight:2}).addTo(map);
+        zoneLayers[key].bindTooltip(ZONE_LABELS[key], {sticky:true, className:'map-label'});
+        zoneLayers[key].bindPopup(`<button type="button" class="secondary zone-delete-btn" data-zone-delete="${key}">${ZONE_LABELS[key]} entfernen</button>`);
+      }
+    } else if(zoneLayers[key]){
+      map.removeLayer(zoneLayers[key]);
+      delete zoneLayers[key];
+    }
+  }
 }
 
 // --- Render ---
@@ -545,6 +680,17 @@ function renderAll(){
   setInputValue('t3', state.triage?.t3 ?? 0);
   setInputValue('t4', state.triage?.t4 ?? 0);
 
+  const fu = state.fuehrung || {};
+  setInputValue('fGel', fu.gel || '');
+  setInputValue('fBlFw', fu.blFw || '');
+  setInputValue('fBlSan', fu.blSan || '');
+  setInputValue('fBlPol', fu.blPol || '');
+  setInputValue('fElFw', fu.elFw || '');
+  setInputValue('fElSan', fu.elSan || '');
+  setInputValue('fElPol', fu.elPol || '');
+  setInputValue('fFu', fu.fu || '');
+  setInputValue('fMedien', fu.mediendienst || '');
+
   if(state.bereitstellungsort){
     const {lat,lng} = state.bereitstellungsort;
     document.getElementById('coordLabel').textContent = 'Bereitstellungsort: ' + lat + ', ' + lng;
@@ -564,6 +710,7 @@ function renderAll(){
     }
   }
 
+  renderZones();
   renderLog();
 }
 
@@ -613,6 +760,20 @@ function handleSaveTriage(){
   });
 }
 
+function handleSaveFuehrung(){
+  wsSend('fuehrung:update', {
+    gel: document.getElementById('fGel').value,
+    blFw: document.getElementById('fBlFw').value,
+    blSan: document.getElementById('fBlSan').value,
+    blPol: document.getElementById('fBlPol').value,
+    elFw: document.getElementById('fElFw').value,
+    elSan: document.getElementById('fElSan').value,
+    elPol: document.getElementById('fElPol').value,
+    fu: document.getElementById('fFu').value,
+    mediendienst: document.getElementById('fMedien').value,
+  });
+}
+
 function handleNewEinsatz(){
   if(!confirm('Neuen Einsatz starten? Der aktuelle Verlauf wird für alle ersetzt.')) return;
   wsSend('einsatz:new', {});
@@ -634,8 +795,19 @@ document.getElementById('btnAddLog').addEventListener('click', handleAddLog);
 document.getElementById('btnLogin').addEventListener('click', handleLogin);
 document.getElementById('btnLogout').addEventListener('click', handleLogout);
 document.getElementById('loginPin').addEventListener('keydown', (e) => { if(e.key === 'Enter') handleLogin(); });
-document.querySelectorAll('.marker-btn').forEach(btn => {
+document.querySelectorAll('.marker-btn[data-marker]').forEach(btn => {
   btn.addEventListener('click', () => setActiveMarkerType(btn.dataset.marker));
+});
+document.querySelectorAll('.zone-btn').forEach(btn => {
+  btn.addEventListener('click', () => startZoneDrawing(btn.dataset.zone));
+});
+document.getElementById('btnFinishZone').addEventListener('click', finishZoneDrawing);
+document.getElementById('btnCancelZone').addEventListener('click', cancelZoneDrawing);
+document.getElementById('btnSaveFuehrung').addEventListener('click', handleSaveFuehrung);
+document.addEventListener('click', (e) => {
+  if(e.target && e.target.classList.contains('zone-delete-btn')){
+    wsSend('zone:clear', {key: e.target.dataset.zoneDelete});
+  }
 });
 document.getElementById('logList').addEventListener('click', (e) => {
   if(e.target && e.target.id === 'btnToggleLog'){

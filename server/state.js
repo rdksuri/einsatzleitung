@@ -9,6 +9,24 @@ const MARKER_LABELS = {
   sammelstelleunverletzte: "Sammelstelle Unverletzte",
 };
 
+const ZONE_LABELS = {
+  gefahrenzone: "Gefahrenzone",
+  sperrzone: "Sperrzone",
+  verkehrsumleitzone: "Verkehrsumleitzone",
+};
+
+const FUEHRUNG_FIELDS = {
+  gel: "GEL",
+  blFw: "BL FW",
+  blSan: "BL SAN",
+  blPol: "BL POL",
+  elFw: "EL FW",
+  elSan: "EL SAN",
+  elPol: "EL POL",
+  fu: "FU",
+  mediendienst: "Mediendienst",
+};
+
 function defaultState() {
   return {
     id: "E-" + Date.now().toString(36).toUpperCase(),
@@ -27,6 +45,8 @@ function defaultState() {
       kommandoposten: null,
       sammelstelleunverletzte: null,
     }, // je {lat, lng}
+    zones: { gefahrenzone: null, sperrzone: null, verkehrsumleitzone: null }, // je [{lat,lng}, ...] oder null
+    fuehrung: { gel: "", blFw: "", blSan: "", blPol: "", elFw: "", elSan: "", elPol: "", fu: "", mediendienst: "" },
     log: [],
     updatedAt: Date.now(),
   };
@@ -130,6 +150,55 @@ function applyMutation(state, msg, kuerzel) {
       break;
     }
 
+    case "zone:set": {
+      const key = payload.key;
+      if (!Object.prototype.hasOwnProperty.call(ZONE_LABELS, key)) {
+        throw new Error("Unbekannter Zonentyp: " + key);
+      }
+      const rawPoints = Array.isArray(payload.points) ? payload.points : [];
+      if (rawPoints.length < 3) {
+        throw new Error("Eine Zone braucht mindestens 3 Punkte");
+      }
+      const points = rawPoints.map((p) => {
+        const lat = Number(p.lat);
+        const lng = Number(p.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          throw new Error("Ungültige Koordinaten in Zone");
+        }
+        return { lat: +lat.toFixed(6), lng: +lng.toFixed(6) };
+      });
+      state.zones = state.zones || {};
+      state.zones[key] = points;
+      addLog(state, kuerzel, ZONE_LABELS[key] + " eingezeichnet (" + points.length + " Punkte)");
+      break;
+    }
+
+    case "zone:clear": {
+      const key = payload.key;
+      if (!Object.prototype.hasOwnProperty.call(ZONE_LABELS, key)) {
+        throw new Error("Unbekannter Zonentyp: " + key);
+      }
+      state.zones = state.zones || {};
+      state.zones[key] = null;
+      addLog(state, kuerzel, ZONE_LABELS[key] + " entfernt");
+      break;
+    }
+
+    case "fuehrung:update": {
+      state.fuehrung = state.fuehrung || {};
+      const parts = [];
+      for (const field of Object.keys(FUEHRUNG_FIELDS)) {
+        if (typeof payload[field] === "string") {
+          state.fuehrung[field] = payload[field].trim().toUpperCase().slice(0, 20);
+        }
+        if (state.fuehrung[field]) {
+          parts.push(FUEHRUNG_FIELDS[field] + "=" + state.fuehrung[field]);
+        }
+      }
+      addLog(state, kuerzel, "Führungsstruktur aktualisiert" + (parts.length ? ": " + parts.join(", ") : ""));
+      break;
+    }
+
     case "bereitstellungsort:set": {
       const lat = Number(payload.lat);
       const lng = Number(payload.lng);
@@ -166,4 +235,4 @@ function applyMutation(state, msg, kuerzel) {
   return state;
 }
 
-module.exports = { defaultState, applyMutation, STATUS_OPTIONS, MARKER_LABELS };
+module.exports = { defaultState, applyMutation, STATUS_OPTIONS, MARKER_LABELS, ZONE_LABELS, FUEHRUNG_FIELDS };

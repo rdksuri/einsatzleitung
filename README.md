@@ -1,8 +1,13 @@
 # einsatzleitung
 
 Live-Lagebild fuer die Einsatzleitung: Einsatzdaten, Sichtungskategorien (T1-T4),
-Bereitstellungsort auf der Karte und ein gemeinsamer Verlauf. Alle verbundenen
-Personen sehen Aenderungen sofort ueber WebSockets, nicht per Polling.
+Fuehrungsstruktur (GEL/Bereichsleiter/Einsatzleiter), Kartenmarker fuer die
+taktischen Symbole aus den kantonalen Einsatzbehelfen (Bereitstellungsort,
+Einsatzort, Rettungsachse, Warteraum, Heli-Landeplatz, Patientensammelstelle,
+Sanitaetshilfsstelle, Standort Einsatzleitung, Sammelstelle Unverletzte),
+einzeichenbare Zonen (Gefahrenzone/Sperrzone/Verkehrsumleitzone) und ein
+gemeinsamer Verlauf. Alle verbundenen Personen sehen Aenderungen sofort ueber
+WebSockets, nicht per Polling.
 
 ## Setup
 
