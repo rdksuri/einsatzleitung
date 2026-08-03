@@ -59,7 +59,7 @@
 
   label{display:block;font-size:12px;font-weight:600;margin-bottom:4px;margin-top:10px;}
   label:first-child{margin-top:0;}
-  input[type=text], input[type=number], select, textarea{
+  input[type=text], input[type=number], input[type=password], select, textarea{
     width:100%;padding:8px;border:1px solid var(--line);background:var(--paper);
     font-family:var(--sans);font-size:14px;color:var(--ink);
   }
@@ -100,12 +100,38 @@
   .log-entry .text{font-size:14px;}
   .empty{color:#888;font-size:13px;font-style:italic;padding:10px 0;}
 
-  .name-badge{font-family:var(--mono);font-size:12px;background:var(--paper);border:1px solid var(--line);padding:6px 10px;display:flex;gap:8px;align-items:center;}
-  .name-badge input{border:none;background:transparent;padding:0;width:100px;font-family:var(--mono);}
-  .name-badge input:focus{outline:none;}
+  .name-badge{font-family:var(--mono);font-size:12px;background:var(--paper);border:1px solid var(--line);padding:6px 10px;display:flex;gap:8px;align-items:center;color:var(--ink);}
+  .logout-link{font-family:var(--mono);font-size:11px;color:var(--paper);opacity:0.75;background:none;border:none;text-decoration:underline;padding:0;text-transform:none;font-weight:400;}
+  .logout-link:hover{opacity:1;filter:none;}
+
+  .login-overlay{
+    position:fixed;inset:0;z-index:2000;
+    background:rgba(27,29,28,0.92);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .login-box{
+    background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--red);
+    padding:24px;width:280px;
+  }
+  .login-box h2{font-size:13px;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 14px;color:var(--red);}
+  .login-error{color:var(--red);font-size:12px;margin-top:10px;min-height:14px;}
 </style>
 </head>
 <body>
+
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>Anmeldung</h2>
+    <label for="loginKuerzel">Kürzel</label>
+    <input type="text" id="loginKuerzel" placeholder="z.B. LL" maxlength="6">
+    <label for="loginPin">Einsatz-PIN</label>
+    <input type="password" id="loginPin" placeholder="PIN" inputmode="numeric">
+    <div style="margin-top:14px;">
+      <button id="btnLogin" style="width:100%;">Anmelden</button>
+    </div>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
 
 <header>
   <div class="title">
@@ -115,9 +141,8 @@
   <div class="status-row">
     <span><span class="dot" id="syncDot"></span><span id="syncLabel">verbunden</span></span>
     <span id="lastUpdate">–</span>
-    <label class="name-badge">Kürzel:
-      <input type="text" id="personName" placeholder="z.B. LL" maxlength="6">
-    </label>
+    <span class="name-badge">Kürzel: <strong id="kuerzelLabel">–</strong></span>
+    <button class="logout-link" id="btnLogout">Abmelden</button>
   </div>
 </header>
 
@@ -187,55 +212,129 @@
 </div>
 
 <script>
-const STORAGE_KEY = "einsatz-current";
-const POLL_MS = 15000; // alle 15 Sekunden statt nur minütlich
+const TOKEN_KEY = "einsatz-token";
+const KUERZEL_KEY = "einsatz-kuerzel";
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 15000;
 
-let state = null;       // zuletzt bekannter geteilter Zustand
-let localVersionSeen = null;
+let state = null;
 let map, marker;
-let pollTimer = null;
+let ws = null;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+let manualClose = false;
 
-function defaultState(){
-  return {
-    id: "E-" + Date.now().toString(36).toUpperCase(),
-    ort: "",
-    status: "Vor Ort",
-    anzahlPatienten: 0,
-    triage: {t1:0,t2:0,t3:0,t4:0},
-    bereitstellungsort: null, // {lat, lng}
-    log: [],
-    updatedAt: Date.now()
-  };
+// --- Auth ---
+function getToken(){ return sessionStorage.getItem(TOKEN_KEY); }
+function getKuerzel(){ return sessionStorage.getItem(KUERZEL_KEY); }
+
+function showLogin(message){
+  document.getElementById('loginOverlay').style.display = 'flex';
+  document.getElementById('loginError').textContent = message || '';
+}
+function hideLogin(){
+  document.getElementById('loginOverlay').style.display = 'none';
 }
 
-function personName(){
-  const el = document.getElementById('personName');
-  return (el.value || '???').trim().toUpperCase().slice(0,6);
-}
-
-// --- Storage ---
-async function loadRemote(){
+async function handleLogin(){
+  const kuerzel = document.getElementById('loginKuerzel').value;
+  const pin = document.getElementById('loginPin').value;
+  const btn = document.getElementById('btnLogin');
+  btn.disabled = true;
   try{
-    const res = await window.storage.get(STORAGE_KEY, true);
-    if(res && res.value){
-      return JSON.parse(res.value);
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ kuerzel, pin })
+    });
+    const data = await res.json();
+    if(!res.ok){
+      showLogin(data.error || 'Anmeldung fehlgeschlagen.');
+      return;
     }
-    return null;
+    sessionStorage.setItem(TOKEN_KEY, data.token);
+    sessionStorage.setItem(KUERZEL_KEY, data.kuerzel);
+    document.getElementById('loginPin').value = '';
+    hideLogin();
+    document.getElementById('kuerzelLabel').textContent = data.kuerzel;
+    connectWs();
   }catch(e){
-    return null;
+    showLogin('Server nicht erreichbar.');
+  }finally{
+    btn.disabled = false;
   }
 }
 
-async function saveRemote(newState){
-  newState.updatedAt = Date.now();
-  try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify(newState), true);
-    state = newState;
-    renderAll();
+function handleLogout(){
+  manualClose = true;
+  if(ws) ws.close();
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(KUERZEL_KEY);
+  state = null;
+  showLogin();
+}
+
+// --- WebSocket ---
+function connectWs(){
+  const token = getToken();
+  if(!token){ showLogin(); return; }
+  manualClose = false;
+  setSyncStatus('stale');
+
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+
+  ws.onopen = () => {
+    reconnectAttempts = 0;
     setSyncStatus('ok');
-  }catch(e){
+  };
+
+  ws.onmessage = (evt) => {
+    let msg;
+    try{ msg = JSON.parse(evt.data); }catch(e){ return; }
+    if(msg.type === 'state:full'){
+      state = msg.payload;
+      renderAll();
+      setSyncStatus('ok');
+    } else if(msg.type === 'error'){
+      console.error('Server-Fehler:', msg.payload?.message);
+    }
+  };
+
+  ws.onclose = (evt) => {
     setSyncStatus('error');
-    console.error('Speichern fehlgeschlagen', e);
+    if(manualClose) return;
+    if(evt.code === 4401){
+      // Token ungültig/abgelaufen -> neu anmelden statt endlos zu reconnecten.
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(KUERZEL_KEY);
+      showLogin('Sitzung abgelaufen, bitte erneut anmelden.');
+      return;
+    }
+    scheduleReconnect();
+  };
+
+  ws.onerror = () => {
+    // onclose übernimmt Reconnect-Logik
+  };
+}
+
+function scheduleReconnect(){
+  if(reconnectTimer) return;
+  const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts), RECONNECT_MAX_MS);
+  reconnectAttempts++;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    if(!getToken()){ showLogin(); return; }
+    connectWs();
+  }, delay);
+}
+
+function wsSend(type, payload){
+  if(ws && ws.readyState === WebSocket.OPEN){
+    ws.send(JSON.stringify({ type, payload }));
+  } else {
+    setSyncStatus('error');
   }
 }
 
@@ -243,7 +342,7 @@ function setSyncStatus(kind){
   const dot = document.getElementById('syncDot');
   const label = document.getElementById('syncLabel');
   dot.className = 'dot' + (kind==='error' ? ' off' : (kind==='stale' ? ' stale' : ''));
-  label.textContent = kind==='error' ? 'Fehler' : (kind==='stale' ? 'wird geladen' : 'verbunden');
+  label.textContent = kind==='error' ? 'getrennt' : (kind==='stale' ? 'verbinde…' : 'verbunden');
   document.getElementById('lastUpdate').textContent = state ? ('Update: ' + new Date(state.updatedAt).toLocaleTimeString('de-CH')) : '–';
 }
 
@@ -267,22 +366,10 @@ function setBereitstellungsort(lat, lng){
     marker = L.marker([lat,lng], {draggable:true}).addTo(map);
     marker.on('dragend', () => {
       const p = marker.getLatLng();
-      persistBereitstellungsort(p.lat, p.lng);
+      wsSend('bereitstellungsort:set', {lat: p.lat, lng: p.lng});
     });
   }
-  persistBereitstellungsort(lat, lng);
-}
-
-async function persistBereitstellungsort(lat, lng){
-  const fresh = (await loadRemote()) || state || defaultState();
-  fresh.bereitstellungsort = {lat: +lat.toFixed(6), lng: +lng.toFixed(6)};
-  fresh.log = fresh.log || [];
-  fresh.log.unshift({
-    zeit: Date.now(),
-    person: personName(),
-    text: 'Bereitstellungsort gesetzt: ' + fresh.bereitstellungsort.lat + ', ' + fresh.bereitstellungsort.lng
-  });
-  await saveRemote(fresh);
+  wsSend('bereitstellungsort:set', {lat, lng});
 }
 
 // --- Render ---
@@ -302,9 +389,10 @@ function renderAll(){
     document.getElementById('coordLabel').textContent = 'Bereitstellungsort: ' + lat + ', ' + lng;
     if(marker){ marker.setLatLng([lat,lng]); }
     else { marker = L.marker([lat,lng], {draggable:true}).addTo(map);
-      marker.on('dragend', () => { const p = marker.getLatLng(); persistBereitstellungsort(p.lat, p.lng); });
+      marker.on('dragend', () => { const p = marker.getLatLng(); wsSend('bereitstellungsort:set', {lat: p.lat, lng: p.lng}); });
     }
   } else {
+    if(marker){ map.removeLayer(marker); marker = null; }
     document.getElementById('coordLabel').textContent = 'Bereitstellungsort: nicht gesetzt';
   }
 
@@ -320,7 +408,6 @@ function renderAll(){
       </div>
     `).join('');
   }
-  setSyncStatus('ok');
 }
 
 function escapeHtml(s){
@@ -328,79 +415,52 @@ function escapeHtml(s){
 }
 
 // --- Actions ---
-async function handleSaveEinsatz(){
-  const fresh = (await loadRemote()) || state || defaultState();
-  fresh.ort = document.getElementById('einsatzOrt').value;
-  fresh.status = document.getElementById('status').value;
-  fresh.anzahlPatienten = parseInt(document.getElementById('anzahlPatienten').value || '0', 10);
-  fresh.triage = {
-    t1: parseInt(document.getElementById('t1').value || '0', 10),
-    t2: parseInt(document.getElementById('t2').value || '0', 10),
-    t3: parseInt(document.getElementById('t3').value || '0', 10),
-    t4: parseInt(document.getElementById('t4').value || '0', 10),
-  };
-  fresh.log = fresh.log || [];
-  fresh.log.unshift({zeit: Date.now(), person: personName(), text: 'Einsatzdaten aktualisiert (Status: ' + fresh.status + ')'});
-  await saveRemote(fresh);
+function handleSaveEinsatz(){
+  wsSend('einsatz:update', {
+    ort: document.getElementById('einsatzOrt').value,
+    status: document.getElementById('status').value,
+    anzahlPatienten: parseInt(document.getElementById('anzahlPatienten').value || '0', 10),
+    triage: {
+      t1: parseInt(document.getElementById('t1').value || '0', 10),
+      t2: parseInt(document.getElementById('t2').value || '0', 10),
+      t3: parseInt(document.getElementById('t3').value || '0', 10),
+      t4: parseInt(document.getElementById('t4').value || '0', 10),
+    }
+  });
 }
 
-async function handleNewEinsatz(){
+function handleNewEinsatz(){
   if(!confirm('Neuen Einsatz starten? Der aktuelle Verlauf wird für alle ersetzt.')) return;
-  const fresh = defaultState();
-  if(marker){ map.removeLayer(marker); marker = null; }
-  await saveRemote(fresh);
+  wsSend('einsatz:new', {});
 }
 
-async function handleAddLog(){
+function handleAddLog(){
   const textEl = document.getElementById('logText');
   const text = textEl.value.trim();
   if(!text) return;
-  const fresh = (await loadRemote()) || state || defaultState();
-  fresh.log = fresh.log || [];
-  fresh.log.unshift({zeit: Date.now(), person: personName(), text});
-  await saveRemote(fresh);
+  wsSend('log:add', { text });
   textEl.value = '';
-}
-
-// --- Polling ---
-async function poll(){
-  setSyncStatus('stale');
-  const remote = await loadRemote();
-  if(remote){
-    state = remote;
-    renderAll();
-  } else if(!state){
-    state = defaultState();
-    renderAll();
-  } else {
-    setSyncStatus('ok');
-  }
-}
-
-function startPolling(){
-  if(pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(poll, POLL_MS);
 }
 
 // --- Init ---
 document.getElementById('btnSaveEinsatz').addEventListener('click', handleSaveEinsatz);
 document.getElementById('btnNewEinsatz').addEventListener('click', handleNewEinsatz);
 document.getElementById('btnAddLog').addEventListener('click', handleAddLog);
-document.getElementById('personName').addEventListener('change', () => {
-  try{ window.storage.set('einsatz-personname', document.getElementById('personName').value, false); }catch(e){}
-});
+document.getElementById('btnLogin').addEventListener('click', handleLogin);
+document.getElementById('btnLogout').addEventListener('click', handleLogout);
+document.getElementById('loginPin').addEventListener('keydown', (e) => { if(e.key === 'Enter') handleLogin(); });
 
-(async function init(){
+(function init(){
   initMap();
-  try{
-    const savedName = await window.storage.get('einsatz-personname', false);
-    if(savedName && savedName.value) document.getElementById('personName').value = savedName.value;
-  }catch(e){}
-
-  const remote = await loadRemote();
-  state = remote || defaultState();
-  if(!remote){ await saveRemote(state); } else { renderAll(); }
-  startPolling();
+  const token = getToken();
+  const kuerzel = getKuerzel();
+  if(token && kuerzel){
+    document.getElementById('kuerzelLabel').textContent = kuerzel;
+    hideLogin();
+    connectWs();
+  } else {
+    showLogin();
+  }
 })();
 </script>
 </body>
