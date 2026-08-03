@@ -44,7 +44,16 @@
     min-height:0;
   }
   @media (max-width: 860px){
-    main{grid-template-columns: 1fr; grid-template-rows:auto auto;}
+    /* Auf Desktop fuellt .panel per overflow-y:auto die volle Viewport-Hoehe
+       und scrollt intern. Auf Mobile gibt es dafuer zu viele Karten - das
+       fuehrt dazu, dass der Grid-Track die Panels auf einen Bruchteil ihrer
+       Inhaltshoehe zusammenquetscht (overflow != visible setzt die
+       automatische Mindestgroesse eines Grid-/Flex-Items auf 0). Fix: auf
+       Mobile ganz normal scrollen lassen wie eine gewoehnliche Seite,
+       statt mehrere verschachtelte Mini-Scrollboxen zu verschachteln.
+     */
+    main{grid-template-columns: 1fr; grid-template-rows:auto auto; flex:none; min-height:auto;}
+    .panel{overflow-y:visible; max-height:none; min-width:0;}
   }
 
   .panel{
@@ -109,6 +118,34 @@
   .marker-btn.active .swatch{border-color:rgba(255,255,255,0.6);}
   .marker-btn:hover{filter:brightness(1.05);}
   .zone-toolbar{top:auto;bottom:50px;left:10px;right:auto;}
+
+  @media (max-width: 860px){
+    /* Die Marker-/Zonen-Toolbars sind als absolute Overlays fuer eine grosse
+       Desktop-Karte gedacht. Auf einem Handy-Bildschirm decken 9+3 gestapelte
+       Buttons fast die ganze Karte ab. Fix: auf Mobile aus dem Overlay in den
+       normalen Dokumentfluss holen und als horizontal scrollbare Chip-Reihen
+       unter der Karte anzeigen - Karte bleibt komplett sichtbar. */
+    #map{width:100%;height:280px;min-height:280px;}
+    /* min-width:0 verhindert den klassischen CSS-Grid-"Blowout": ohne das
+       erzwingt der nicht umbrechende Inhalt der Toolbar-Chips (white-space:
+       nowrap) eine automatische Mindestbreite des Grid-Items, die den
+       1fr-Track und damit die ganze Seite breiter als den Viewport macht. */
+    .map-wrap{height:auto; min-width:0;}
+    .map-hint, .coord, .marker-toolbar, .zone-toolbar{
+      position:static;
+      top:auto;left:auto;right:auto;bottom:auto;
+    }
+    .marker-toolbar, .zone-toolbar{
+      flex-direction:row;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+      width:100%;
+      box-sizing:border-box;
+      border-top:none;
+    }
+    .marker-btn{flex:0 0 auto;white-space:nowrap;}
+    #zoneDrawControls{flex:0 0 auto;}
+  }
 
   .map-pin{width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
     background:var(--pin-color, var(--red));border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5);}
