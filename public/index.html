@@ -169,6 +169,7 @@
   .log-entry{border-bottom:1px solid var(--line);padding:10px 0;}
   .log-entry:last-child{border-bottom:none;}
   .log-entry .meta{font-family:var(--mono);font-size:11px;color:#666;margin-bottom:3px;}
+  .log-kategorie{font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:0.04em;}
   .log-entry .text{font-size:14px;}
   .empty{color:#888;font-size:13px;font-style:italic;padding:10px 0;}
 
@@ -304,10 +305,21 @@
     <div class="card">
       <details open>
         <summary>Eintrag hinzufügen</summary>
+        <label for="logKategorie">Kategorie</label>
+        <select id="logKategorie" required>
+          <option value="" disabled selected>— Kategorie wählen —</option>
+          <option value="front">Front</option>
+          <option value="el">EL</option>
+          <option value="transport">Transport</option>
+          <option value="warteraum">Warteraum</option>
+          <option value="behandlung">Behandlung</option>
+          <option value="mobsanhist">MobSanHist</option>
+        </select>
         <textarea id="logText" placeholder="Beobachtung, Massnahme, Meldung ..."></textarea>
         <div style="margin-top:10px;">
           <button id="btnAddLog">Eintrag senden</button>
         </div>
+        <div class="login-error" id="logKategorieError"></div>
       </details>
     </div>
 
@@ -511,6 +523,15 @@ const MARKER_LABELS = {
   sanitaetshilfsstelle: 'Sanitätshilfsstelle/Transportstelle',
   kommandoposten: 'Standort Einsatzleitung',
   sammelstelleunverletzte: 'Sammelstelle Unverletzte',
+};
+
+const LOG_KATEGORIE_LABELS = {
+  front: 'Front',
+  el: 'EL',
+  transport: 'Transport',
+  warteraum: 'Warteraum',
+  behandlung: 'Behandlung',
+  mobsanhist: 'MobSanHist',
 };
 // Symbole 1:1 aus dem kantonalen Einsatzbehelf (Zeichenerklaerung "Erste
 // Absprache") bzw. der Checkliste Chef Transport nachgebaut, statt
@@ -838,12 +859,16 @@ function renderLog(){
     return;
   }
   const visible = logExpanded ? entries : entries.slice(0, LOG_COLLAPSED_COUNT);
-  let html = visible.map(e => `
+  let html = visible.map(e => {
+    const kategorieLabel = e.kategorie ? LOG_KATEGORIE_LABELS[e.kategorie] : null;
+    const kategorieTag = kategorieLabel ? ` · <span class="log-kategorie">${escapeHtml(kategorieLabel)}</span>` : '';
+    return `
       <div class="log-entry">
-        <div class="meta">${new Date(e.zeit).toLocaleTimeString('de-CH')} · ${escapeHtml(e.person)}</div>
+        <div class="meta">${new Date(e.zeit).toLocaleTimeString('de-CH')} · ${escapeHtml(e.person)}${kategorieTag}</div>
         <div class="text">${escapeHtml(e.text)}</div>
       </div>
-    `).join('');
+    `;
+  }).join('');
   if(entries.length > LOG_COLLAPSED_COUNT){
     const label = logExpanded ? 'Weniger anzeigen' : `Alle anzeigen (${entries.length})`;
     html += `<button type="button" class="secondary" id="btnToggleLog" style="width:100%;margin-top:10px;">${label}</button>`;
@@ -896,10 +921,19 @@ function handleNewEinsatz(){
 
 function handleAddLog(){
   const textEl = document.getElementById('logText');
+  const kategorieEl = document.getElementById('logKategorie');
+  const errorEl = document.getElementById('logKategorieError');
   const text = textEl.value.trim();
+  const kategorie = kategorieEl.value;
+  if(!kategorie){
+    errorEl.textContent = 'Bitte eine Kategorie auswählen.';
+    return;
+  }
   if(!text) return;
-  wsSend('log:add', { text });
+  errorEl.textContent = '';
+  wsSend('log:add', { text, kategorie });
   textEl.value = '';
+  kategorieEl.value = '';
 }
 
 // --- Init ---

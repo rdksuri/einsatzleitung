@@ -27,6 +27,15 @@ const FUEHRUNG_FIELDS = {
   mediendienst: "Mediendienst",
 };
 
+const LOG_KATEGORIE_LABELS = {
+  front: "Front",
+  el: "EL",
+  transport: "Transport",
+  warteraum: "Warteraum",
+  behandlung: "Behandlung",
+  mobsanhist: "MobSanHist",
+};
+
 function defaultState() {
   return {
     id: "E-" + Date.now().toString(36).toUpperCase(),
@@ -58,9 +67,11 @@ function clampInt(value, fallback) {
   return Number.isFinite(n) && n >= 0 ? n : fallback ?? 0;
 }
 
-function addLog(state, person, text) {
+function addLog(state, person, text, kategorie) {
   state.log = state.log || [];
-  state.log.unshift({ zeit: Date.now(), person, text });
+  const entry = { zeit: Date.now(), person, text };
+  if (kategorie) entry.kategorie = kategorie;
+  state.log.unshift(entry);
 }
 
 const STATUS_OPTIONS = [
@@ -229,7 +240,11 @@ function applyMutation(state, msg, kuerzel) {
     case "log:add": {
       const text = String(payload.text || "").trim().slice(0, 2000);
       if (!text) throw new Error("Leerer Eintrag");
-      addLog(state, kuerzel, text);
+      const kategorie = payload.kategorie;
+      if (!Object.prototype.hasOwnProperty.call(LOG_KATEGORIE_LABELS, kategorie)) {
+        throw new Error("Kategorie ist obligatorisch");
+      }
+      addLog(state, kuerzel, text, kategorie);
       break;
     }
 
@@ -241,4 +256,4 @@ function applyMutation(state, msg, kuerzel) {
   return state;
 }
 
-module.exports = { defaultState, applyMutation, STATUS_OPTIONS, MARKER_LABELS, ZONE_LABELS, FUEHRUNG_FIELDS };
+module.exports = { defaultState, applyMutation, STATUS_OPTIONS, MARKER_LABELS, ZONE_LABELS, FUEHRUNG_FIELDS, LOG_KATEGORIE_LABELS };
