@@ -325,6 +325,17 @@
 
     <div class="card">
       <details>
+        <summary>Export</summary>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button type="button" class="secondary" id="btnExportCsv">Verlauf als CSV</button>
+          <button type="button" class="secondary" id="btnExportJson">Gesamter Einsatzstand als JSON</button>
+        </div>
+        <div class="field-note">CSV eignet sich fuer Excel/Rapport, JSON fuer ein vollstaendiges Backup.</div>
+      </details>
+    </div>
+
+    <div class="card">
+      <details>
         <summary>POLYCOM-Kanäle</summary>
         <div style="margin-top:10px;font-size:12px;font-family:var(--mono);">
           <div style="margin-bottom:6px;"><strong>G593 «StrRg UR»</strong><br>Einsatzleiter FW/SAN/POL untereinander</div>
@@ -936,11 +947,54 @@ function handleAddLog(){
   kategorieEl.value = '';
 }
 
+function downloadFile(content, filename, mimeType, withBom){
+  const parts = withBom ? ['﻿', content] : [content];
+  const blob = new Blob(parts, { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function csvEscape(value){
+  const str = String(value ?? '');
+  if(/[",;\n]/.test(str)){
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+function handleExportCsv(){
+  if(!state) return;
+  const rows = [['Zeit', 'Kürzel', 'Kategorie', 'Text']];
+  const entries = [...(state.log || [])].reverse(); // chronologisch aufsteigend
+  for(const e of entries){
+    const zeit = new Date(e.zeit).toLocaleString('de-CH');
+    const kategorie = e.kategorie ? (LOG_KATEGORIE_LABELS[e.kategorie] || e.kategorie) : '';
+    rows.push([zeit, e.person, kategorie, e.text]);
+  }
+  // Semikolon als Trennzeichen, da Excel in DE-CH-Gebietsschemas Komma als
+  // Dezimaltrennzeichen erwartet.
+  const csv = rows.map(r => r.map(csvEscape).join(';')).join('\r\n');
+  downloadFile(csv, `verlauf-${state.id}.csv`, 'text/csv;charset=utf-8', true);
+}
+
+function handleExportJson(){
+  if(!state) return;
+  downloadFile(JSON.stringify(state, null, 2), `einsatz-${state.id}.json`, 'application/json;charset=utf-8');
+}
+
 // --- Init ---
 document.getElementById('btnSaveEinsatz').addEventListener('click', handleSaveEinsatz);
 document.getElementById('btnSaveTriage').addEventListener('click', handleSaveTriage);
 document.getElementById('btnNewEinsatz').addEventListener('click', handleNewEinsatz);
 document.getElementById('btnAddLog').addEventListener('click', handleAddLog);
+document.getElementById('btnExportCsv').addEventListener('click', handleExportCsv);
+document.getElementById('btnExportJson').addEventListener('click', handleExportJson);
 document.getElementById('btnLogin').addEventListener('click', handleLogin);
 document.getElementById('btnLogout').addEventListener('click', handleLogout);
 document.getElementById('loginPin').addEventListener('keydown', (e) => { if(e.key === 'Enter') handleLogin(); });
