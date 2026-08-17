@@ -72,7 +72,9 @@
     display:flex;flex-direction:column;gap:18px;
   }
   .card{border:1px solid var(--line);padding:14px;background:var(--panel);}
-  .card h2{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 10px;color:var(--red);font-weight:700;}
+  .card h2, .card summary{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 10px;color:var(--red);font-weight:700;}
+  .card summary{cursor:pointer;}
+  .card details[open] summary{margin-bottom:10px;}
 
   label{display:block;font-size:12px;font-weight:600;margin-bottom:4px;margin-top:10px;}
   label:first-child{margin-top:0;}
@@ -220,90 +222,98 @@
   <div class="panel">
 
     <div class="card">
-      <h2>Einsatz</h2>
-      <label for="einsatzOrt">Einsatzort</label>
-      <input type="text" id="einsatzOrt" placeholder="Adresse / Ortsbezeichnung">
-      <label for="elsNummer">ELS-Nummer</label>
-      <input type="text" id="elsNummer" placeholder="Einsatzleitsystem-Nr.">
-      <div class="row2">
-        <div>
-          <label for="status">Status</label>
-          <select id="status">
-            <option>Alarmiert</option>
-            <option>Anfahrt</option>
-            <option selected>Vor Ort</option>
-            <option>Sichtung läuft</option>
-            <option>Abtransport läuft</option>
-            <option>Abgeschlossen</option>
-          </select>
+      <details open>
+        <summary>Einsatz</summary>
+        <label for="einsatzOrt">Einsatzort</label>
+        <input type="text" id="einsatzOrt" placeholder="Adresse / Ortsbezeichnung">
+        <label for="elsNummer">ELS-Nummer</label>
+        <input type="text" id="elsNummer" placeholder="Einsatzleitsystem-Nr.">
+        <div class="row2">
+          <div>
+            <label for="status">Status</label>
+            <select id="status">
+              <option>Alarmiert</option>
+              <option>Anfahrt</option>
+              <option selected>Vor Ort</option>
+              <option>Sichtung läuft</option>
+              <option>Abtransport läuft</option>
+              <option>Abgeschlossen</option>
+            </select>
+          </div>
+          <div>
+            <label for="anzahlPatienten">Anzahl Patienten</label>
+            <input type="number" id="anzahlPatienten" min="0" value="0">
+          </div>
         </div>
-        <div>
-          <label for="anzahlPatienten">Anzahl Patienten</label>
-          <input type="number" id="anzahlPatienten" min="0" value="0">
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button id="btnSaveEinsatz">Speichern</button>
+          <button class="danger" id="btnNewEinsatz">Neuer Einsatz</button>
         </div>
-      </div>
-      <div style="margin-top:12px;display:flex;gap:8px;">
-        <button id="btnSaveEinsatz">Speichern</button>
-        <button class="danger" id="btnNewEinsatz">Neuer Einsatz</button>
-      </div>
+      </details>
     </div>
 
     <div class="card">
-      <h2>Führungsstruktur</h2>
-      <div class="row2">
-        <div><label for="fGel">GEL</label><input type="text" id="fGel" maxlength="20"></div>
-        <div><label for="fFu">FU</label><input type="text" id="fFu" maxlength="20"></div>
-      </div>
-      <div class="row2">
-        <div><label for="fBlFw">BL FW</label><input type="text" id="fBlFw" maxlength="20"></div>
-        <div><label for="fBlSan">BL SAN</label><input type="text" id="fBlSan" maxlength="20"></div>
-      </div>
-      <div class="row2">
-        <div><label for="fBlPol">BL POL</label><input type="text" id="fBlPol" maxlength="20"></div>
-        <div><label for="fMedien">Mediendienst</label><input type="text" id="fMedien" maxlength="20"></div>
-      </div>
-      <div class="row2">
-        <div><label for="fElFw">EL FW</label><input type="text" id="fElFw" maxlength="20"></div>
-        <div><label for="fElSan">EL SAN</label><input type="text" id="fElSan" maxlength="20"></div>
-      </div>
-      <div class="row2">
-        <div><label for="fElPol">EL POL</label><input type="text" id="fElPol" maxlength="20"></div>
-        <div></div>
-      </div>
-      <div style="margin-top:12px;">
-        <button id="btnSaveFuehrung">Speichern</button>
-      </div>
+      <details open>
+        <summary>Führungsstruktur</summary>
+        <div class="row2">
+          <div><label for="fGel">GEL</label><input type="text" id="fGel" maxlength="20"></div>
+          <div><label for="fFu">FU</label><input type="text" id="fFu" maxlength="20"></div>
+        </div>
+        <div class="row2">
+          <div><label for="fBlFw">BL FW</label><input type="text" id="fBlFw" maxlength="20"></div>
+          <div><label for="fBlSan">BL SAN</label><input type="text" id="fBlSan" maxlength="20"></div>
+        </div>
+        <div class="row2">
+          <div><label for="fBlPol">BL POL</label><input type="text" id="fBlPol" maxlength="20"></div>
+          <div><label for="fMedien">Mediendienst</label><input type="text" id="fMedien" maxlength="20"></div>
+        </div>
+        <div class="row2">
+          <div><label for="fElFw">EL FW</label><input type="text" id="fElFw" maxlength="20"></div>
+          <div><label for="fElSan">EL SAN</label><input type="text" id="fElSan" maxlength="20"></div>
+        </div>
+        <div class="row2">
+          <div><label for="fElPol">EL POL</label><input type="text" id="fElPol" maxlength="20"></div>
+          <div></div>
+        </div>
+        <div style="margin-top:12px;">
+          <button id="btnSaveFuehrung">Speichern</button>
+        </div>
+      </details>
     </div>
 
     <div class="card">
-      <h2>Sichtungskategorien</h2>
-      <div class="row2">
-        <div><label>T1 (rot)</label><input type="number" id="t1" min="0" value="0"></div>
-        <div><label>T2 (gelb)</label><input type="number" id="t2" min="0" value="0"></div>
-        <div><label>T3 (grün)</label><input type="number" id="t3" min="0" value="0"></div>
-        <div><label>T4 (blau)</label><input type="number" id="t4" min="0" value="0"></div>
-      </div>
-      <div class="row2">
-        <div><label>Weiss (unverletzt)</label><input type="number" id="weiss" min="0" value="0"></div>
-        <div></div>
-      </div>
-      <div style="margin-top:12px;">
-        <button id="btnSaveTriage">Speichern</button>
-      </div>
-      <div class="field-note">Wer die Anzahl anpasst, wird im Verlauf protokolliert.</div>
+      <details open>
+        <summary>Sichtungskategorien</summary>
+        <div class="row2">
+          <div><label>T1 (rot)</label><input type="number" id="t1" min="0" value="0"></div>
+          <div><label>T2 (gelb)</label><input type="number" id="t2" min="0" value="0"></div>
+          <div><label>T3 (grün)</label><input type="number" id="t3" min="0" value="0"></div>
+          <div><label>T4 (blau)</label><input type="number" id="t4" min="0" value="0"></div>
+        </div>
+        <div class="row2">
+          <div><label>Weiss (unverletzt)</label><input type="number" id="weiss" min="0" value="0"></div>
+          <div></div>
+        </div>
+        <div style="margin-top:12px;">
+          <button id="btnSaveTriage">Speichern</button>
+        </div>
+        <div class="field-note">Wer die Anzahl anpasst, wird im Verlauf protokolliert.</div>
+      </details>
     </div>
 
     <div class="card">
-      <h2>Eintrag hinzufügen</h2>
-      <textarea id="logText" placeholder="Beobachtung, Massnahme, Meldung ..."></textarea>
-      <div style="margin-top:10px;">
-        <button id="btnAddLog">Eintrag senden</button>
-      </div>
+      <details open>
+        <summary>Eintrag hinzufügen</summary>
+        <textarea id="logText" placeholder="Beobachtung, Massnahme, Meldung ..."></textarea>
+        <div style="margin-top:10px;">
+          <button id="btnAddLog">Eintrag senden</button>
+        </div>
+      </details>
     </div>
 
     <div class="card">
       <details>
-        <summary style="cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--red);font-weight:700;">POLYCOM-Kanäle</summary>
+        <summary>POLYCOM-Kanäle</summary>
         <div style="margin-top:10px;font-size:12px;font-family:var(--mono);">
           <div style="margin-bottom:6px;"><strong>G593 «StrRg UR»</strong><br>Einsatzleiter FW/SAN/POL untereinander</div>
           <div style="margin-bottom:6px;"><strong>G493 «Fhr UR»</strong><br>Gesamteinsatzleitung ↔ Einsatzleiter</div>
