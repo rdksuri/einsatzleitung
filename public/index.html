@@ -330,10 +330,10 @@
 
   <div class="map-wrap">
     <div id="map"></div>
-    <div class="map-hint" id="mapHint">Klick auf Karte = Bereitstellungsort setzen/verschieben</div>
+    <div class="map-hint" id="mapHint">Klick auf Karte = Einsatzort setzen/verschieben</div>
     <div class="marker-toolbar" id="markerToolbar">
-      <button type="button" class="marker-btn active" data-marker="bereitstellungsort"><span class="swatch" style="background:#3388ff;"></span>Bereitstellungsort</button>
-      <button type="button" class="marker-btn" data-marker="einsatzort"><span class="swatch" style="background:var(--red);"></span>Einsatzort</button>
+      <button type="button" class="marker-btn" data-marker="bereitstellungsort"><span class="swatch" style="background:#3388ff;"></span>Bereitstellungsort</button>
+      <button type="button" class="marker-btn active" data-marker="einsatzort"><span class="swatch" style="background:var(--red);"></span>Einsatzort</button>
       <button type="button" class="marker-btn" data-marker="rettungsachse"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Rettungsachse</button>
       <button type="button" class="marker-btn" data-marker="warteraum"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Warteraum</button>
       <button type="button" class="marker-btn" data-marker="helilandeplatz"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Heli-Landeplatz</button>
@@ -371,7 +371,7 @@ const RECONNECT_MAX_MS = 15000;
 let state = null;
 let map, marker;
 let markerRefs = {}; // key -> Leaflet marker instance (einsatzort, rettungsachse, warteraum, helilandeplatz)
-let activeMarkerType = 'bereitstellungsort';
+let activeMarkerType = 'einsatzort';
 let ws = null;
 let reconnectAttempts = 0;
 let reconnectTimer = null;
