@@ -56,7 +56,17 @@ function defaultState() {
       sammelstelleunverletzte: null,
     }, // je {lat, lng}
     zones: { gefahrenzone: null, sperrzone: null, verkehrsumleitzone: null }, // je [{lat,lng}, ...] oder null
-    fuehrung: { gel: "", blFw: "", blSan: "", blPol: "", elFw: "", elSan: "", elPol: "", fu: "", mediendienst: "" },
+    fuehrung: {
+      gel: "", gelTel: "",
+      blFw: "", blFwTel: "",
+      blSan: "", blSanTel: "",
+      blPol: "", blPolTel: "",
+      elFw: "", elFwTel: "",
+      elSan: "", elSanTel: "",
+      elPol: "", elPolTel: "",
+      fu: "", fuTel: "",
+      mediendienst: "", mediendienstTel: "",
+    },
     log: [],
     updatedAt: Date.now(),
   };
@@ -205,11 +215,16 @@ function applyMutation(state, msg, kuerzel) {
       state.fuehrung = state.fuehrung || {};
       const parts = [];
       for (const field of Object.keys(FUEHRUNG_FIELDS)) {
+        const telField = field + "Tel";
         if (typeof payload[field] === "string") {
           state.fuehrung[field] = payload[field].trim().toUpperCase().slice(0, 20);
         }
+        if (typeof payload[telField] === "string") {
+          state.fuehrung[telField] = payload[telField].trim().slice(0, 30);
+        }
         if (state.fuehrung[field]) {
-          parts.push(FUEHRUNG_FIELDS[field] + "=" + state.fuehrung[field]);
+          const tel = state.fuehrung[telField] ? " (" + state.fuehrung[telField] + ")" : "";
+          parts.push(FUEHRUNG_FIELDS[field] + "=" + state.fuehrung[field] + tel);
         }
       }
       addLog(state, kuerzel, "Führungsstruktur aktualisiert" + (parts.length ? ": " + parts.join(", ") : ""));

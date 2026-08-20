@@ -257,24 +257,40 @@
       <details>
         <summary>Führungsstruktur</summary>
         <div class="row2">
-          <div><label for="fGel">GEL</label><input type="text" id="fGel" maxlength="20"></div>
-          <div><label for="fFu">FU</label><input type="text" id="fFu" maxlength="20"></div>
+          <div><label for="fGel">GEL Kürzel</label><input type="text" id="fGel" maxlength="20"></div>
+          <div><label for="fGelTel">GEL Telefon</label><input type="tel" id="fGelTel" maxlength="30"></div>
         </div>
         <div class="row2">
-          <div><label for="fBlFw">BL FW</label><input type="text" id="fBlFw" maxlength="20"></div>
-          <div><label for="fBlSan">BL SAN</label><input type="text" id="fBlSan" maxlength="20"></div>
+          <div><label for="fBlFw">BL FW Kürzel</label><input type="text" id="fBlFw" maxlength="20"></div>
+          <div><label for="fBlFwTel">BL FW Telefon</label><input type="tel" id="fBlFwTel" maxlength="30"></div>
         </div>
         <div class="row2">
-          <div><label for="fBlPol">BL POL</label><input type="text" id="fBlPol" maxlength="20"></div>
-          <div><label for="fMedien">Mediendienst</label><input type="text" id="fMedien" maxlength="20"></div>
+          <div><label for="fBlSan">BL SAN Kürzel</label><input type="text" id="fBlSan" maxlength="20"></div>
+          <div><label for="fBlSanTel">BL SAN Telefon</label><input type="tel" id="fBlSanTel" maxlength="30"></div>
         </div>
         <div class="row2">
-          <div><label for="fElFw">EL FW</label><input type="text" id="fElFw" maxlength="20"></div>
-          <div><label for="fElSan">EL SAN</label><input type="text" id="fElSan" maxlength="20"></div>
+          <div><label for="fBlPol">BL POL Kürzel</label><input type="text" id="fBlPol" maxlength="20"></div>
+          <div><label for="fBlPolTel">BL POL Telefon</label><input type="tel" id="fBlPolTel" maxlength="30"></div>
         </div>
         <div class="row2">
-          <div><label for="fElPol">EL POL</label><input type="text" id="fElPol" maxlength="20"></div>
-          <div></div>
+          <div><label for="fElFw">EL FW Kürzel</label><input type="text" id="fElFw" maxlength="20"></div>
+          <div><label for="fElFwTel">EL FW Telefon</label><input type="tel" id="fElFwTel" maxlength="30"></div>
+        </div>
+        <div class="row2">
+          <div><label for="fElSan">EL SAN Kürzel</label><input type="text" id="fElSan" maxlength="20"></div>
+          <div><label for="fElSanTel">EL SAN Telefon</label><input type="tel" id="fElSanTel" maxlength="30"></div>
+        </div>
+        <div class="row2">
+          <div><label for="fElPol">EL POL Kürzel</label><input type="text" id="fElPol" maxlength="20"></div>
+          <div><label for="fElPolTel">EL POL Telefon</label><input type="tel" id="fElPolTel" maxlength="30"></div>
+        </div>
+        <div class="row2">
+          <div><label for="fFu">FU Kürzel</label><input type="text" id="fFu" maxlength="20"></div>
+          <div><label for="fFuTel">FU Telefon</label><input type="tel" id="fFuTel" maxlength="30"></div>
+        </div>
+        <div class="row2">
+          <div><label for="fMedien">Mediendienst Kürzel</label><input type="text" id="fMedien" maxlength="20"></div>
+          <div><label for="fMedienTel">Mediendienst Telefon</label><input type="tel" id="fMedienTel" maxlength="30"></div>
         </div>
         <div style="margin-top:12px;">
           <button id="btnSaveFuehrung">Speichern</button>
@@ -847,14 +863,23 @@ function renderAll(){
 
   const fu = state.fuehrung || {};
   setInputValue('fGel', fu.gel || '');
+  setInputValue('fGelTel', fu.gelTel || '');
   setInputValue('fBlFw', fu.blFw || '');
+  setInputValue('fBlFwTel', fu.blFwTel || '');
   setInputValue('fBlSan', fu.blSan || '');
+  setInputValue('fBlSanTel', fu.blSanTel || '');
   setInputValue('fBlPol', fu.blPol || '');
+  setInputValue('fBlPolTel', fu.blPolTel || '');
   setInputValue('fElFw', fu.elFw || '');
+  setInputValue('fElFwTel', fu.elFwTel || '');
   setInputValue('fElSan', fu.elSan || '');
+  setInputValue('fElSanTel', fu.elSanTel || '');
   setInputValue('fElPol', fu.elPol || '');
+  setInputValue('fElPolTel', fu.elPolTel || '');
   setInputValue('fFu', fu.fu || '');
+  setInputValue('fFuTel', fu.fuTel || '');
   setInputValue('fMedien', fu.mediendienst || '');
+  setInputValue('fMedienTel', fu.mediendienstTel || '');
 
   if(state.bereitstellungsort){
     const {lat,lng} = state.bereitstellungsort;
@@ -934,14 +959,23 @@ function handleSaveTriage(){
 function handleSaveFuehrung(){
   wsSend('fuehrung:update', {
     gel: document.getElementById('fGel').value,
+    gelTel: document.getElementById('fGelTel').value,
     blFw: document.getElementById('fBlFw').value,
+    blFwTel: document.getElementById('fBlFwTel').value,
     blSan: document.getElementById('fBlSan').value,
+    blSanTel: document.getElementById('fBlSanTel').value,
     blPol: document.getElementById('fBlPol').value,
+    blPolTel: document.getElementById('fBlPolTel').value,
     elFw: document.getElementById('fElFw').value,
+    elFwTel: document.getElementById('fElFwTel').value,
     elSan: document.getElementById('fElSan').value,
+    elSanTel: document.getElementById('fElSanTel').value,
     elPol: document.getElementById('fElPol').value,
+    elPolTel: document.getElementById('fElPolTel').value,
     fu: document.getElementById('fFu').value,
+    fuTel: document.getElementById('fFuTel').value,
     mediendienst: document.getElementById('fMedien').value,
+    mediendienstTel: document.getElementById('fMedienTel').value,
   });
 }
 
