@@ -76,6 +76,14 @@
   .big-number{font-family:var(--mono);font-size:34px;font-weight:700;line-height:1;}
   .field-note{font-size:11px;color:#666;margin-top:4px;}
 
+  .voice-box{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+  .voice-status{font-size:12px;font-family:var(--mono);color:#666;}
+  #btnVoiceInput.listening{background:var(--red);border-color:var(--red);color:#fff;animation:voice-pulse 1.2s ease-in-out infinite;}
+  @keyframes voice-pulse{
+    0%,100%{box-shadow:0 0 0 0 rgba(200,40,31,0.5);}
+    50%{box-shadow:0 0 0 8px rgba(200,40,31,0);}
+  }
+
   /* Karte ist jetzt eine eigene Karte in derselben aufklappbaren Liste wie
      Einsatz/Fuehrungsstruktur - kein Overlay mehr, alles normaler
      Dokumentfluss. Toolbars sind horizontal scrollbare Chip-Reihen unter
@@ -374,6 +382,11 @@
     <div class="card">
       <details>
         <summary>Eintrag hinzufügen</summary>
+        <div class="voice-box" id="voiceBox" style="display:none;">
+          <button type="button" id="btnVoiceInput" class="secondary">🎤 Sprachbefehl</button>
+          <span class="voice-status" id="voiceStatus"></span>
+        </div>
+        <div class="field-note" id="voiceTranscript" style="display:none;"></div>
         <label for="logKategorie">Kategorie</label>
         <select id="logKategorie" required>
           <option value="" disabled selected>— Kategorie wählen —</option>
@@ -1078,6 +1091,132 @@ function handleAddLog(){
   wsSend('log:add', { text, kategorie });
   textEl.value = '';
   kategorieEl.value = '';
+  const transcriptEl = document.getElementById('voiceTranscript');
+  transcriptEl.style.display = 'none';
+  transcriptEl.textContent = '';
+}
+
+// --- Sprachbefehl fuer Eintraege ---
+// Erkennt gesprochene Saetze wie "Eintrag fuer Front, dokumentiere
+// Folgendes: ..." und befuellt Kategorie + Text automatisch. Laeuft
+// komplett im Browser per Web Speech API (kostenlos, kein Server-Call,
+// keine KI) - dafuer nur in Chrome/Edge/Android Chrome verfuegbar
+// (Firefox/Safari unterstuetzen die API nicht), daher Feature-Detection
+// statt eines ueberall sichtbaren, aber teils kaputten Buttons.
+const KATEGORIE_ALIASES = {
+  front: ['front'],
+  el: ['e l', 'el', 'einsatzleitung'],
+  transport: ['transport'],
+  warteraum: ['warteraum', 'warte raum'],
+  behandlung: ['behandlung', 'behandlungsplatz'],
+  // "MobSanHist" ist kein normales Wort - Spracherkennung verhoert sich
+  // hier haeufig, daher mehrere bekannte Fehltranskriptionen als Alias.
+  mobsanhist: ['mobsanhist', 'mob san hist', 'mob sani hist', 'mob sanhist', 'mopsan hist', 'mobile sanitätshilfsstelle', 'mobile san hist'],
+};
+
+function findKategorieInText(text){
+  const norm = text.toLowerCase();
+  for(const [key, aliases] of Object.entries(KATEGORIE_ALIASES)){
+    for(const alias of aliases){
+      // Wortgrenzen statt reinem Substring-Vergleich: sonst matcht das
+      // kurze Alias "el" versehentlich in ganz normalen Woertern wie
+      // "Zelt" oder "Baustelle".
+      const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp('(?:^|\\s)' + escaped + '(?:\\s|$|[.,;:!?])');
+      if(pattern.test(norm)) return key;
+    }
+  }
+  return null;
+}
+
+function parseVoiceCommand(transcript){
+  const norm = transcript.trim();
+  let kategorie = null;
+  let text = norm;
+
+  const fuerMatch = norm.match(/f[üu]r\s+([a-zA-ZäöüÄÖÜß.\s]+?)(?:\s+und\b|,|:|$)/i);
+  if(fuerMatch){
+    kategorie = findKategorieInText(fuerMatch[1]);
+  }
+  if(!kategorie){
+    kategorie = findKategorieInText(norm);
+  }
+
+  const triggerMatch = norm.match(/(?:dokumentiere|notiere|text|inhalt)(?:\s+folgendes)?\s*:?\s*(.+)$/i);
+  if(triggerMatch && triggerMatch[1].trim()){
+    text = triggerMatch[1].trim();
+  } else if(fuerMatch){
+    const idx = norm.indexOf(fuerMatch[0]);
+    const afterFuer = norm.slice(idx + fuerMatch[0].length);
+    const cleaned = afterFuer.replace(/^\s*(und\s+)?(dokumentiere|notiere)?\s*(folgendes)?\s*:?\s*/i, '').trim();
+    if(cleaned) text = cleaned;
+  }
+
+  if(text) text = text.charAt(0).toUpperCase() + text.slice(1);
+  return { kategorie, text };
+}
+
+let voiceRecognition = null;
+let voiceListening = false;
+
+function initVoiceInput(){
+  const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognitionCtor) return; // Browser unterstuetzt es nicht - Button bleibt versteckt
+
+  document.getElementById('voiceBox').style.display = 'flex';
+
+  voiceRecognition = new SpeechRecognitionCtor();
+  voiceRecognition.lang = 'de-CH';
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = false;
+
+  const btn = document.getElementById('btnVoiceInput');
+  const statusEl = document.getElementById('voiceStatus');
+  const transcriptEl = document.getElementById('voiceTranscript');
+
+  voiceRecognition.onstart = () => {
+    voiceListening = true;
+    btn.classList.add('listening');
+    btn.textContent = '⏹ Aufnahme stoppen';
+    statusEl.textContent = 'Höre zu ...';
+  };
+
+  voiceRecognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    const { kategorie, text } = parseVoiceCommand(transcript);
+    if(kategorie){
+      document.getElementById('logKategorie').value = kategorie;
+      document.getElementById('logKategorieError').textContent = '';
+    }
+    if(text){
+      document.getElementById('logText').value = text;
+    }
+    transcriptEl.style.display = 'block';
+    const kategorieLabel = kategorie ? LOG_KATEGORIE_LABELS[kategorie] : 'nicht erkannt - bitte manuell wählen';
+    transcriptEl.textContent = `Erkannt: „${transcript}“ → Kategorie: ${kategorieLabel}`;
+  };
+
+  voiceRecognition.onerror = (event) => {
+    statusEl.textContent = event.error === 'not-allowed'
+      ? 'Mikrofonzugriff verweigert.'
+      : 'Nicht verstanden, bitte erneut versuchen.';
+  };
+
+  voiceRecognition.onend = () => {
+    voiceListening = false;
+    btn.classList.remove('listening');
+    btn.textContent = '🎤 Sprachbefehl';
+    if(statusEl.textContent === 'Höre zu ...') statusEl.textContent = '';
+  };
+
+  btn.addEventListener('click', () => {
+    if(voiceListening){
+      voiceRecognition.stop();
+    } else {
+      statusEl.textContent = '';
+      voiceRecognition.start();
+    }
+  });
 }
 
 function downloadFile(content, filename, mimeType, withBom){
@@ -1173,6 +1312,7 @@ document.getElementById('detailsKarte').addEventListener('toggle', (e) => {
 
 (function init(){
   initMap();
+  initVoiceInput();
   const token = getToken();
   const kuerzel = getKuerzel();
   if(token && kuerzel){
