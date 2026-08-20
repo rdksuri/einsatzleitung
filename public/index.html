@@ -223,7 +223,7 @@
   <div class="panel">
 
     <div class="card">
-      <details>
+      <details id="detailsEinsatz">
         <summary>Einsatz</summary>
         <label for="einsatzOrt">Einsatzort</label>
         <input type="text" id="einsatzOrt" placeholder="Adresse / Ortsbezeichnung">
@@ -702,6 +702,13 @@ function placeMarker(key, lat, lng){
 function setMarker(key, lat, lng){
   placeMarker(key, lat, lng); // optimistisch sofort anzeigen, Server bestaetigt/korrigiert per Broadcast
   wsSend('marker:set', {key, lat, lng});
+  if(key === 'einsatzort'){
+    // Einsatzort-Feld wird automatisch uebernommen (Reverse-Geocoding) -
+    // Karte aufklappen, damit das sichtbar ist statt in der eingeklappten
+    // Einsatz-Karte zu verschwinden.
+    const details = document.getElementById('detailsEinsatz');
+    if(details) details.open = true;
+  }
 }
 
 function refreshMarkerModeUI(){
