@@ -19,7 +19,11 @@
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font-family:var(--sans);}
+  /* Einheitlicher Dokumentfluss statt fixem Viewport-Grid: die Seite
+     scrollt ganz normal, jede Karte (inkl. Karte/Map) ist ein
+     gleichwertiger, unabhaengig ein-/ausklappbarer Abschnitt in EINER
+     Spalte - auf Mobile wie auf Desktop identisch. */
+  html,body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);}
   body{display:flex;flex-direction:column;}
 
   header{
@@ -37,50 +41,22 @@
   .dot.stale{background:var(--amber);}
   .dot.off{background:#888;}
 
-  main{
-    flex:1;display:grid;
-    grid-template-columns: 360px 1fr;
-    gap:0;
-    min-height:0;
-  }
-  @media (max-width: 860px){
-    /* Auf Desktop fuellt .panel per overflow-y:auto die volle Viewport-Hoehe
-       und scrollt intern. Auf Mobile gibt es dafuer zu viele Karten - das
-       fuehrt dazu, dass der Grid-Track die Panels auf einen Bruchteil ihrer
-       Inhaltshoehe zusammenquetscht (overflow != visible setzt die
-       automatische Mindestgroesse eines Grid-/Flex-Items auf 0). Fix: auf
-       Mobile ganz normal scrollen lassen wie eine gewoehnliche Seite,
-       statt mehrere verschachtelte Mini-Scrollboxen zu verschachteln.
-     */
-    /* body ist ein Flex-Container mit fixer height:100% - das zwingt ALLE
-       Kinder (Header, main, und den separaten Verlauf-.panel danach) in ein
-       festes Viewport-Budget. Ohne genug Platz quetscht Flexbox das letzte
-       Element (Verlauf) auf einen winzigen Rest zusammen, der dann intern
-       (unsichtbar) scrollt. Fix an der Wurzel: auf Mobile keine feste
-       Seitenhoehe erzwingen, dann verteilt Flexbox nichts mehr und die Seite
-       waechst natuerlich auf ihre Inhaltshoehe. */
-    html, body{height:auto;}
-    main{grid-template-columns: 1fr; grid-template-rows:auto auto; flex:none; min-height:auto;}
-    .panel{overflow-y:visible; max-height:none; min-width:0;}
-  }
-
   .panel{
     background:var(--panel);
-    border-right:1px solid var(--line);
-    overflow-y:auto;
     padding:18px;
     display:flex;flex-direction:column;gap:18px;
+    max-width:900px;width:100%;margin:0 auto;
   }
-  .card{border:1px solid var(--line);padding:14px;background:var(--panel);}
-  .card h2, .card summary{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 10px;color:var(--red);font-weight:700;}
+  .card{border:1px solid var(--line);padding:20px;background:var(--panel);}
+  .card h2, .card summary{font-size:12px;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 10px;color:var(--red);font-weight:700;}
   .card summary{cursor:pointer;}
-  .card details[open] summary{margin-bottom:10px;}
+  .card details[open] summary{margin-bottom:14px;}
 
-  label{display:block;font-size:12px;font-weight:600;margin-bottom:4px;margin-top:10px;}
+  label{display:block;font-size:13px;font-weight:600;margin-bottom:5px;margin-top:12px;}
   label:first-child{margin-top:0;}
   input[type=text], input[type=number], input[type=password], select, textarea{
-    width:100%;padding:8px;border:1px solid var(--line);background:var(--paper);
-    font-family:var(--sans);font-size:14px;color:var(--ink);
+    width:100%;padding:10px;border:1px solid var(--line);background:var(--paper);
+    font-family:var(--sans);font-size:15px;color:var(--ink);
   }
   input:focus, select:focus, textarea:focus{outline:2px solid var(--red);outline-offset:1px;}
   textarea{resize:vertical;min-height:50px;}
@@ -100,63 +76,39 @@
   .big-number{font-family:var(--mono);font-size:34px;font-weight:700;line-height:1;}
   .field-note{font-size:11px;color:#666;margin-top:4px;}
 
-  #map{width:100%;height:100%;min-height:320px;}
-  .map-wrap{position:relative;}
+  /* Karte ist jetzt eine eigene Karte in derselben aufklappbaren Liste wie
+     Einsatz/Fuehrungsstruktur - kein Overlay mehr, alles normaler
+     Dokumentfluss. Toolbars sind horizontal scrollbare Chip-Reihen unter
+     der Karte, einheitlich auf jeder Bildschirmgroesse. */
+  #map{width:100%;height:min(65vh, 600px);min-height:320px;}
+  .map-wrap{display:flex;flex-direction:column;gap:6px;}
   .map-hint{
-    position:absolute;top:10px;left:10px;z-index:1000;
     background:rgba(255,255,255,0.92);border:1px solid var(--line);
     padding:6px 10px;font-size:12px;font-family:var(--mono);
   }
   .coord{
-    position:absolute;bottom:10px;left:10px;z-index:1000;
     background:rgba(255,255,255,0.92);border:1px solid var(--line);
     padding:6px 10px;font-size:11px;font-family:var(--mono);
   }
 
   .marker-toolbar{
-    position:absolute;top:10px;right:10px;z-index:1000;
-    display:flex;flex-direction:column;gap:4px;
+    display:flex;flex-direction:row;
+    overflow-x:auto;-webkit-overflow-scrolling:touch;
+    gap:4px;
     background:rgba(255,255,255,0.92);border:1px solid var(--line);
-    padding:6px;
+    padding:6px;box-sizing:border-box;width:100%;
   }
   .marker-btn{
     font-family:var(--mono);font-weight:700;font-size:11px;text-transform:none;letter-spacing:0;
     padding:6px 10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);
     cursor:pointer;text-align:left;display:flex;align-items:center;gap:6px;
+    flex:0 0 auto;white-space:nowrap;
   }
   .marker-btn .swatch{width:10px;height:10px;flex:0 0 auto;border:1px solid rgba(0,0,0,0.3);}
   .marker-btn.active{background:var(--ink);color:var(--paper);border-color:var(--ink);}
   .marker-btn.active .swatch{border-color:rgba(255,255,255,0.6);}
   .marker-btn:hover{filter:brightness(1.05);}
-  .zone-toolbar{top:auto;bottom:50px;left:10px;right:auto;}
-
-  @media (max-width: 860px){
-    /* Die Marker-/Zonen-Toolbars sind als absolute Overlays fuer eine grosse
-       Desktop-Karte gedacht. Auf einem Handy-Bildschirm decken 9+3 gestapelte
-       Buttons fast die ganze Karte ab. Fix: auf Mobile aus dem Overlay in den
-       normalen Dokumentfluss holen und als horizontal scrollbare Chip-Reihen
-       unter der Karte anzeigen - Karte bleibt komplett sichtbar. */
-    #map{width:100%;height:280px;min-height:280px;}
-    /* min-width:0 verhindert den klassischen CSS-Grid-"Blowout": ohne das
-       erzwingt der nicht umbrechende Inhalt der Toolbar-Chips (white-space:
-       nowrap) eine automatische Mindestbreite des Grid-Items, die den
-       1fr-Track und damit die ganze Seite breiter als den Viewport macht. */
-    .map-wrap{height:auto; min-width:0;}
-    .map-hint, .coord, .marker-toolbar, .zone-toolbar{
-      position:static;
-      top:auto;left:auto;right:auto;bottom:auto;
-    }
-    .marker-toolbar, .zone-toolbar{
-      flex-direction:row;
-      overflow-x:auto;
-      -webkit-overflow-scrolling:touch;
-      width:100%;
-      box-sizing:border-box;
-      border-top:none;
-    }
-    .marker-btn{flex:0 0 auto;white-space:nowrap;}
-    #zoneDrawControls{flex:0 0 auto;}
-  }
+  #zoneDrawControls{flex:0 0 auto;display:flex;gap:4px;}
 
   .map-pin{width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
     background:var(--pin-color, var(--red));border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5);}
@@ -166,6 +118,9 @@
     background:rgba(255,255,255,0.92) !important;border:1px solid var(--line) !important;color:var(--ink) !important;
     padding:2px 6px !important;box-shadow:none !important;}
 
+  .log-filter{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .log-filter label{margin:0;flex:0 0 auto;}
+  .log-filter select{width:auto;min-width:180px;}
   .log{display:flex;flex-direction:column;gap:0;}
   .log-entry{border-bottom:1px solid var(--line);padding:10px 0;}
   .log-entry:last-child{border-bottom:none;}
@@ -320,6 +275,37 @@
     </div>
 
     <div class="card">
+      <details id="detailsKarte">
+        <summary>Karte</summary>
+        <div class="map-wrap">
+          <div id="map"></div>
+          <div class="map-hint" id="mapHint">Klick auf Karte = Einsatzort setzen/verschieben</div>
+          <div class="marker-toolbar" id="markerToolbar">
+            <button type="button" class="marker-btn" data-marker="bereitstellungsort"><span class="swatch" style="background:#3388ff;"></span>Bereitstellungsort</button>
+            <button type="button" class="marker-btn active" data-marker="einsatzort"><span class="swatch" style="background:var(--red);"></span>Einsatzort</button>
+            <button type="button" class="marker-btn" data-marker="rettungsachse"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Rettungsachse</button>
+            <button type="button" class="marker-btn" data-marker="warteraum"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Warteraum</button>
+            <button type="button" class="marker-btn" data-marker="helilandeplatz"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Heli-Landeplatz</button>
+            <button type="button" class="marker-btn" data-marker="patientensammelstelle"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Patientensammelstelle</button>
+            <button type="button" class="marker-btn" data-marker="sanitaetshilfsstelle"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Sanitätshilfsstelle</button>
+            <button type="button" class="marker-btn" data-marker="kommandoposten"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Standort Einsatzleitung</button>
+            <button type="button" class="marker-btn" data-marker="sammelstelleunverletzte"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Sammelstelle Unverletzte</button>
+          </div>
+          <div class="coord" id="coordLabel">Bereitstellungsort: nicht gesetzt</div>
+          <div class="marker-toolbar zone-toolbar" id="zoneToolbar">
+            <button type="button" class="marker-btn zone-btn" data-zone="gefahrenzone" style="border-left:4px solid #c8281f;">Gefahrenzone</button>
+            <button type="button" class="marker-btn zone-btn" data-zone="sperrzone" style="border-left:4px solid #e8b923;">Sperrzone</button>
+            <button type="button" class="marker-btn zone-btn" data-zone="verkehrsumleitzone" style="border-left:4px solid #3d6b3a;">Verkehrsumleitzone</button>
+            <div id="zoneDrawControls" style="display:none;gap:4px;">
+              <button type="button" id="btnFinishZone" class="secondary" style="flex:1;">Fertig</button>
+              <button type="button" id="btnCancelZone" class="secondary" style="flex:1;">Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="card">
       <details>
         <summary>Führungsstruktur</summary>
         <div class="row2">
@@ -433,37 +419,23 @@
     </div>
 
   </div>
-
-  <div class="map-wrap">
-    <div id="map"></div>
-    <div class="map-hint" id="mapHint">Klick auf Karte = Einsatzort setzen/verschieben</div>
-    <div class="marker-toolbar" id="markerToolbar">
-      <button type="button" class="marker-btn" data-marker="bereitstellungsort"><span class="swatch" style="background:#3388ff;"></span>Bereitstellungsort</button>
-      <button type="button" class="marker-btn active" data-marker="einsatzort"><span class="swatch" style="background:var(--red);"></span>Einsatzort</button>
-      <button type="button" class="marker-btn" data-marker="rettungsachse"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Rettungsachse</button>
-      <button type="button" class="marker-btn" data-marker="warteraum"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Warteraum</button>
-      <button type="button" class="marker-btn" data-marker="helilandeplatz"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Heli-Landeplatz</button>
-      <button type="button" class="marker-btn" data-marker="patientensammelstelle"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Patientensammelstelle</button>
-      <button type="button" class="marker-btn" data-marker="sanitaetshilfsstelle"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Sanitätshilfsstelle</button>
-      <button type="button" class="marker-btn" data-marker="kommandoposten"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Standort Einsatzleitung</button>
-      <button type="button" class="marker-btn" data-marker="sammelstelleunverletzte"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Sammelstelle Unverletzte</button>
-    </div>
-    <div class="coord" id="coordLabel">Bereitstellungsort: nicht gesetzt</div>
-    <div class="marker-toolbar zone-toolbar" id="zoneToolbar">
-      <button type="button" class="marker-btn zone-btn" data-zone="gefahrenzone" style="border-left:4px solid #c8281f;">Gefahrenzone</button>
-      <button type="button" class="marker-btn zone-btn" data-zone="sperrzone" style="border-left:4px solid #e8b923;">Sperrzone</button>
-      <button type="button" class="marker-btn zone-btn" data-zone="verkehrsumleitzone" style="border-left:4px solid #3d6b3a;">Verkehrsumleitzone</button>
-      <div id="zoneDrawControls" style="display:none;gap:4px;">
-        <button type="button" id="btnFinishZone" class="secondary" style="flex:1;">Fertig</button>
-        <button type="button" id="btnCancelZone" class="secondary" style="flex:1;">Abbrechen</button>
-      </div>
-    </div>
-  </div>
 </main>
 
-<div class="panel" style="border-right:none;border-top:1px solid var(--line);">
+<div class="panel" style="border-top:1px solid var(--line);">
   <div class="card" style="flex:1;">
     <h2>Verlauf</h2>
+    <div class="log-filter">
+      <label for="logFilterKategorie">Filter</label>
+      <select id="logFilterKategorie">
+        <option value="">Alle Kategorien</option>
+        <option value="front">Front</option>
+        <option value="el">EL</option>
+        <option value="transport">Transport</option>
+        <option value="warteraum">Warteraum</option>
+        <option value="behandlung">Behandlung</option>
+        <option value="mobsanhist">MobSanHist</option>
+      </select>
+    </div>
     <div class="log" id="logList"><div class="empty">Noch keine Einträge.</div></div>
   </div>
 </div>
@@ -978,9 +950,15 @@ let logExpanded = false;
 
 function renderLog(){
   const list = document.getElementById('logList');
-  const entries = (state && state.log) || [];
-  if(entries.length === 0){
+  const allEntries = (state && state.log) || [];
+  const filterKategorie = document.getElementById('logFilterKategorie').value;
+  const entries = filterKategorie ? allEntries.filter(e => e.kategorie === filterKategorie) : allEntries;
+  if(allEntries.length === 0){
     list.innerHTML = '<div class="empty">Noch keine Einträge.</div>';
+    return;
+  }
+  if(entries.length === 0){
+    list.innerHTML = '<div class="empty">Keine Einträge für diese Kategorie.</div>';
     return;
   }
   const visible = logExpanded ? entries : entries.slice(0, LOG_COLLAPSED_COUNT);
@@ -1176,6 +1154,20 @@ document.getElementById('logList').addEventListener('click', (e) => {
   if(e.target && e.target.id === 'btnToggleLog'){
     logExpanded = !logExpanded;
     renderLog();
+  }
+});
+document.getElementById('logFilterKategorie').addEventListener('change', () => {
+  logExpanded = false;
+  renderLog();
+});
+document.getElementById('detailsKarte').addEventListener('toggle', (e) => {
+  // Leaflet berechnet die Kachelraster-Groesse beim Init bzw. bei jeder
+  // Groessenaenderung des Containers. Da die Karte jetzt in einem
+  // <details> steckt, das beim Laden zu ist (Container-Groesse 0), muss
+  // Leaflet informiert werden, sobald die Karte tatsaechlich sichtbar
+  // wird - sonst bleiben die Kacheln grau/falsch positioniert.
+  if(e.target.open && mapReady){
+    setTimeout(() => map.invalidateSize(), 50);
   }
 });
 
