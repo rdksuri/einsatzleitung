@@ -43,7 +43,7 @@ function defaultState() {
     elsNummer: "",
     status: "Vor Ort",
     anzahlPatienten: 0,
-    triage: { t1: 0, t2: 0, t3: 0, t4: 0, weiss: 0 },
+    triage: { t1: 0, t2: 0, t3: 0, t4: 0, schwarz: 0, weiss: 0 },
     bereitstellungsort: null, // {lat, lng}
     markers: {
       einsatzort: null,
@@ -75,6 +75,20 @@ function defaultState() {
 function clampInt(value, fallback) {
   const n = parseInt(value, 10);
   return Number.isFinite(n) && n >= 0 ? n : fallback ?? 0;
+}
+
+// Anzahl Patienten wird nicht mehr manuell erfasst, sondern ist immer die
+// Summe der Sichtungskategorien - eine einzige Quelle der Wahrheit statt
+// zweier Zahlen, die auseinanderlaufen koennen.
+function computeAnzahlPatienten(triage) {
+  return (
+    (triage.t1 || 0) +
+    (triage.t2 || 0) +
+    (triage.t3 || 0) +
+    (triage.t4 || 0) +
+    (triage.schwarz || 0) +
+    (triage.weiss || 0)
+  );
 }
 
 function addLog(state, person, text, kategorie) {
@@ -111,17 +125,15 @@ function applyMutation(state, msg, kuerzel) {
       if (STATUS_OPTIONS.includes(payload.status)) {
         state.status = payload.status;
       }
-      state.anzahlPatienten = clampInt(
-        payload.anzahlPatienten,
-        state.anzahlPatienten
-      );
       state.triage = {
         t1: clampInt(payload.triage?.t1, state.triage.t1),
         t2: clampInt(payload.triage?.t2, state.triage.t2),
         t3: clampInt(payload.triage?.t3, state.triage.t3),
         t4: clampInt(payload.triage?.t4, state.triage.t4),
+        schwarz: clampInt(payload.triage?.schwarz, state.triage.schwarz),
         weiss: clampInt(payload.triage?.weiss, state.triage.weiss),
       };
+      state.anzahlPatienten = computeAnzahlPatienten(state.triage);
       addLog(state, kuerzel, "Einsatzdaten aktualisiert (Status: " + state.status + ")");
       break;
     }
@@ -137,12 +149,14 @@ function applyMutation(state, msg, kuerzel) {
         t2: clampInt(payload.t2, state.triage.t2),
         t3: clampInt(payload.t3, state.triage.t3),
         t4: clampInt(payload.t4, state.triage.t4),
+        schwarz: clampInt(payload.schwarz, state.triage.schwarz),
         weiss: clampInt(payload.weiss, state.triage.weiss),
       };
+      state.anzahlPatienten = computeAnzahlPatienten(state.triage);
       addLog(
         state,
         kuerzel,
-        `Sichtungskategorien aktualisiert: T1=${state.triage.t1}, T2=${state.triage.t2}, T3=${state.triage.t3}, T4=${state.triage.t4}, Weiss=${state.triage.weiss}`
+        `Sichtungskategorien aktualisiert: T1=${state.triage.t1}, T2=${state.triage.t2}, T3=${state.triage.t3}, T4=${state.triage.t4}, Schwarz=${state.triage.schwarz}, Weiss=${state.triage.weiss}`
       );
       break;
     }
