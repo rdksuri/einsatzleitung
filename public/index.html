@@ -118,6 +118,29 @@
   .marker-btn:hover{filter:brightness(1.05);}
   #zoneDrawControls{flex:0 0 auto;display:flex;gap:4px;}
 
+  .skizze-toolbar{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:10px;}
+  .skizze-tools, .skizze-colors, .skizze-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .skizze-tool-btn{
+    font-family:var(--mono);font-weight:700;font-size:11px;text-transform:none;letter-spacing:0;
+    padding:6px 10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    cursor:pointer;
+  }
+  .skizze-tool-btn.active{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+  .skizze-tool-btn:hover{filter:brightness(1.05);}
+  .skizze-color-btn{
+    width:26px;height:26px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0;
+  }
+  .skizze-color-btn.active{border-color:var(--ink);box-shadow:0 0 0 2px var(--paper), 0 0 0 4px var(--ink);}
+  .skizze-canvas-wrap{border:1px solid var(--line);max-width:100%;}
+  #skizzeCanvas{
+    display:block;width:100%;height:auto;max-width:800px;
+    background-color:#fff;
+    background-image:
+      repeating-linear-gradient(0deg, #dde3e7, #dde3e7 1px, transparent 1px, transparent 24px),
+      repeating-linear-gradient(90deg, #dde3e7, #dde3e7 1px, transparent 1px, transparent 24px);
+    cursor:crosshair;touch-action:none;
+  }
+
   .map-pin{width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
     background:var(--pin-color, var(--red));border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5);}
   .map-svg-icon{filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));}
@@ -310,6 +333,39 @@
             </div>
           </div>
         </div>
+      </details>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>Skizze</summary>
+        <div class="skizze-toolbar">
+          <div class="skizze-tools">
+            <button type="button" class="skizze-tool-btn active" data-tool="bleistift">✏️ Bleistift</button>
+            <button type="button" class="skizze-tool-btn" data-tool="marker">🖊️ Marker</button>
+            <button type="button" class="skizze-tool-btn" data-tool="lineal">📏 Lineal</button>
+            <button type="button" class="skizze-tool-btn" data-tool="radiergummi">🧹 Radiergummi</button>
+          </div>
+          <div class="skizze-colors">
+            <button type="button" class="skizze-color-btn active" data-color="#1b1d1c" style="background:#1b1d1c;" title="Schwarz"></button>
+            <button type="button" class="skizze-color-btn" data-color="#c8281f" style="background:#c8281f;" title="Rot"></button>
+            <button type="button" class="skizze-color-btn" data-color="#2f6fa5" style="background:#2f6fa5;" title="Blau"></button>
+            <button type="button" class="skizze-color-btn" data-color="#3d6b3a" style="background:#3d6b3a;" title="Grün"></button>
+            <button type="button" class="skizze-color-btn" data-color="#e8b923" style="background:#e8b923;" title="Gelb"></button>
+            <button type="button" class="skizze-color-btn" data-color="#8e44ad" style="background:#8e44ad;" title="Violett"></button>
+          </div>
+          <div class="skizze-actions">
+            <button type="button" class="secondary" id="btnSkizzeUndo">Rückgängig</button>
+            <button type="button" class="secondary" id="btnSkizzeClear">Blatt leeren</button>
+          </div>
+        </div>
+        <div class="skizze-canvas-wrap">
+          <canvas id="skizzeCanvas" width="800" height="600"></canvas>
+        </div>
+        <div style="margin-top:12px;">
+          <button id="btnSaveSkizze">Speichern</button>
+        </div>
+        <div class="field-note">Skizze wird beim Speichern für alle sichtbar geteilt.</div>
       </details>
     </div>
 
@@ -955,6 +1011,7 @@ function renderAll(){
   }
 
   renderZones();
+  loadSkizzeFromState();
   renderLog();
 }
 
@@ -1171,6 +1228,143 @@ function parseVoiceCommand(transcript){
   return { kategorie, text };
 }
 
+// --- Skizze ---
+// Gitterpapier ist reiner CSS-Hintergrund hinter dem Canvas (nicht Teil der
+// Bitmap) - so bleibt es bei Rueckgaengig/Blatt-leeren unberuehrt. Die
+// Skizze wird wie alle anderen Karten erst beim Klick auf "Speichern" als
+// PNG-Data-URL geteilt, kein Live-Sync pro Strich.
+let skizzeCanvas = null;
+let skizzeCtx = null;
+let skizzeTool = 'bleistift';
+let skizzeColor = '#1b1d1c';
+let skizzeDrawing = false;
+let skizzeLastPoint = null;
+let skizzeLineStart = null;
+let skizzeSnapshotBeforeStroke = null;
+let skizzeUndoStack = [];
+let lastLoadedSkizzeData = undefined;
+
+const SKIZZE_TOOL_WIDTHS = {
+  bleistift: 2,
+  marker: 8,
+  lineal: 3,
+  radiergummi: 20,
+};
+
+function skizzeGetPoint(e){
+  const rect = skizzeCanvas.getBoundingClientRect();
+  const scaleX = skizzeCanvas.width / rect.width;
+  const scaleY = skizzeCanvas.height / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY,
+  };
+}
+
+function skizzeDrawSegment(from, to){
+  skizzeCtx.globalCompositeOperation = skizzeTool === 'radiergummi' ? 'destination-out' : 'source-over';
+  skizzeCtx.strokeStyle = skizzeColor;
+  skizzeCtx.lineWidth = SKIZZE_TOOL_WIDTHS[skizzeTool] || 2;
+  skizzeCtx.lineCap = 'round';
+  skizzeCtx.lineJoin = 'round';
+  skizzeCtx.beginPath();
+  skizzeCtx.moveTo(from.x, from.y);
+  skizzeCtx.lineTo(to.x, to.y);
+  skizzeCtx.stroke();
+}
+
+function skizzePointerDown(e){
+  e.preventDefault();
+  skizzeCanvas.setPointerCapture(e.pointerId);
+  skizzeDrawing = true;
+  skizzeSnapshotBeforeStroke = skizzeCtx.getImageData(0, 0, skizzeCanvas.width, skizzeCanvas.height);
+  const p = skizzeGetPoint(e);
+  skizzeLastPoint = p;
+  skizzeLineStart = p;
+  if(skizzeTool !== 'lineal'){
+    skizzeDrawSegment(p, p); // Punkt bei reinem Klick ohne Ziehen
+  }
+}
+
+function skizzePointerMove(e){
+  if(!skizzeDrawing) return;
+  e.preventDefault();
+  const p = skizzeGetPoint(e);
+  if(skizzeTool === 'lineal'){
+    // Vorschau: Snapshot vor dem Strich wiederherstellen, dann gerade
+    // Linie vom Startpunkt bis zur aktuellen Position zeichnen - wie ein
+    // angelegtes Lineal, das man verschiebt, bevor man loslaesst.
+    skizzeCtx.putImageData(skizzeSnapshotBeforeStroke, 0, 0);
+    skizzeDrawSegment(skizzeLineStart, p);
+  } else {
+    skizzeDrawSegment(skizzeLastPoint, p);
+    skizzeLastPoint = p;
+  }
+}
+
+function skizzePointerUp(){
+  if(!skizzeDrawing) return;
+  skizzeDrawing = false;
+  skizzeUndoStack.push(skizzeSnapshotBeforeStroke);
+  if(skizzeUndoStack.length > 20) skizzeUndoStack.shift();
+  skizzeSnapshotBeforeStroke = null;
+}
+
+function skizzeUndo(){
+  if(skizzeUndoStack.length === 0) return;
+  const snapshot = skizzeUndoStack.pop();
+  skizzeCtx.putImageData(snapshot, 0, 0);
+}
+
+function skizzeClear(){
+  if(!confirm('Skizze wirklich leeren?')) return;
+  skizzeUndoStack.push(skizzeCtx.getImageData(0, 0, skizzeCanvas.width, skizzeCanvas.height));
+  skizzeCtx.clearRect(0, 0, skizzeCanvas.width, skizzeCanvas.height);
+}
+
+function handleSaveSkizze(){
+  const dataUrl = skizzeCanvas.toDataURL('image/png');
+  wsSend('skizze:set', { data: dataUrl });
+}
+
+function loadSkizzeFromState(){
+  if(!skizzeCtx || !state) return;
+  const data = state.skizze || null;
+  if(data === lastLoadedSkizzeData) return; // nichts Neues - lokale Bearbeitung nicht ueberschreiben
+  lastLoadedSkizzeData = data;
+  skizzeCtx.clearRect(0, 0, skizzeCanvas.width, skizzeCanvas.height);
+  if(!data) return;
+  const img = new Image();
+  img.onload = () => { skizzeCtx.drawImage(img, 0, 0, skizzeCanvas.width, skizzeCanvas.height); };
+  img.src = data;
+}
+
+function initSkizze(){
+  skizzeCanvas = document.getElementById('skizzeCanvas');
+  skizzeCtx = skizzeCanvas.getContext('2d');
+
+  skizzeCanvas.addEventListener('pointerdown', skizzePointerDown);
+  skizzeCanvas.addEventListener('pointermove', skizzePointerMove);
+  window.addEventListener('pointerup', skizzePointerUp);
+  window.addEventListener('pointercancel', skizzePointerUp);
+
+  document.querySelectorAll('.skizze-tool-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      skizzeTool = btn.dataset.tool;
+      document.querySelectorAll('.skizze-tool-btn').forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
+  document.querySelectorAll('.skizze-color-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      skizzeColor = btn.dataset.color;
+      document.querySelectorAll('.skizze-color-btn').forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
+  document.getElementById('btnSkizzeUndo').addEventListener('click', skizzeUndo);
+  document.getElementById('btnSkizzeClear').addEventListener('click', skizzeClear);
+  document.getElementById('btnSaveSkizze').addEventListener('click', handleSaveSkizze);
+}
+
 let voiceRecognition = null;
 let voiceListening = false;
 let voiceManualStop = false;
@@ -1374,6 +1568,7 @@ document.getElementById('detailsKarte').addEventListener('toggle', (e) => {
 
 (function init(){
   initMap();
+  initSkizze();
   initVoiceInput();
   const token = getToken();
   const kuerzel = getKuerzel();

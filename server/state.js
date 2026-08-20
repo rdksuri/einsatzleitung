@@ -67,10 +67,13 @@ function defaultState() {
       fu: "", fuTel: "",
       mediendienst: "", mediendienstTel: "",
     },
+    skizze: null, // Data-URL (PNG) der gemeinsamen Lageskizze, oder null
     log: [],
     updatedAt: Date.now(),
   };
 }
+
+const SKIZZE_MAX_LENGTH = 3 * 1024 * 1024; // Sicherheitsnetz gegen ausufernde Payloads
 
 function clampInt(value, fallback) {
   const n = parseInt(value, 10);
@@ -274,6 +277,19 @@ function applyMutation(state, msg, kuerzel) {
         throw new Error("Kategorie ist obligatorisch");
       }
       addLog(state, kuerzel, text, kategorie);
+      break;
+    }
+
+    case "skizze:set": {
+      const data = String(payload.data || "");
+      if (!data.startsWith("data:image/png;base64,")) {
+        throw new Error("Ungültiges Bildformat");
+      }
+      if (data.length > SKIZZE_MAX_LENGTH) {
+        throw new Error("Skizze ist zu gross");
+      }
+      state.skizze = data;
+      addLog(state, kuerzel, "Skizze aktualisiert");
       break;
     }
 
