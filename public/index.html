@@ -1184,15 +1184,22 @@ function initVoiceInput(){
 
   voiceRecognition = new SpeechRecognitionCtor();
   voiceRecognition.lang = 'de-CH';
-  // continuous:true haelt die Aufnahme ueber Sprechpausen hinweg am Laufen,
-  // statt (wie im Standardmodus) nach dem ersten erkannten Satz von selbst
-  // zu stoppen. Manche Browser beenden die Session trotzdem von sich aus
-  // nach laengerer Stille (z.B. "no-speech") - das wird unten transparent
-  // mit einem Neustart abgefangen, damit es sich fuer die Person wirklich
-  // wie eine durchgehende Aufnahme anfuehlt, die nur per Klick auf
-  // "Stopp" endet.
-  voiceRecognition.continuous = true;
-  voiceRecognition.interimResults = true;
+  // continuous:true (kombiniert mit interimResults:true) ist ueber Browser
+  // und Geraete hinweg unzuverlaessig: auf Android Chrome wurde dabei
+  // event.resultIndex teils falsch gezaehlt, sodass bereits verarbeitete
+  // Ergebnisse nochmal (mehrfach) reinkamen - Woerter tauchten vervielfacht
+  // im Text auf. Auf Desktop fuehrte ein interner Neustart der Engine
+  // waehrend eines laufenden Satzes dazu, dass nur ein einzelnes Wort
+  // uebrig blieb. Stattdessen: jede Aufnahme ist ein sauberer
+  // Einzel-Erkennungsversuch (continuous:false, kein interimResults) -
+  // das ist der Standardfall, den jeder Browser zuverlaessig unterstuetzt
+  // und der zuverlaessig auf eine natuerliche Sprechpause wartet, bevor er
+  // das Endergebnis liefert. "Durchgehend zuhoeren, bis Stopp geklickt
+  // wird" wird stattdessen auf App-Ebene nachgebildet: sobald eine
+  // Einzel-Aufnahme (ohne manuellen Stopp) endet, wird sofort die naechste
+  // gestartet und an den bisherigen Text angehaengt.
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = false;
 
   const btn = document.getElementById('btnVoiceInput');
   const statusEl = document.getElementById('voiceStatus');
@@ -1222,16 +1229,12 @@ function initVoiceInput(){
   };
 
   voiceRecognition.onresult = (event) => {
-    let interim = '';
-    for(let i = event.resultIndex; i < event.results.length; i++){
-      const chunk = event.results[i][0].transcript;
-      if(event.results[i].isFinal){
-        voiceAccumulatedTranscript = (voiceAccumulatedTranscript + ' ' + chunk).trim();
-      } else {
-        interim += chunk;
-      }
-    }
-    statusEl.textContent = 'Höre zu ... ' + (voiceAccumulatedTranscript + ' ' + interim).trim();
+    // Bei continuous:false liefert jede Session hoechstens ein einziges,
+    // vollstaendiges Endergebnis - einfach anhaengen, kein Indexzaehlen
+    // noetig (Quelle der Mehrfach-Woerter-Buggs auf Mobile).
+    const chunk = event.results[event.results.length - 1][0].transcript;
+    voiceAccumulatedTranscript = (voiceAccumulatedTranscript + ' ' + chunk).trim();
+    statusEl.textContent = 'Höre zu ... ' + voiceAccumulatedTranscript;
   };
 
   voiceRecognition.onerror = (event) => {
