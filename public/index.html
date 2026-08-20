@@ -708,6 +708,19 @@ function setMarker(key, lat, lng){
     // Einsatz-Karte zu verschwinden.
     const details = document.getElementById('detailsEinsatz');
     if(details) details.open = true;
+    // setInputValue() blockt Updates auf ein Feld, das vom Server-Wert
+    // abweicht (Schutz vor ueberschriebenen, noch ungespeicherten
+    // Eingaben bei gleichzeitigen Aenderungen anderer Personen). Das Klicken
+    // auf die Karte ist aber eine bewusste, direkte Aktion - eine evtl. noch
+    // nicht gespeicherte, liegen gebliebene Texteingabe im Feld soll die
+    // gleich eintreffende, per Reverse-Geocoding ermittelte Adresse nicht
+    // blockieren. Feld + Baseline hier synchron zuruecksetzen, damit der
+    // naechste renderAll()-Durchlauf nicht als "dirty" gilt.
+    const ortInput = document.getElementById('einsatzOrt');
+    if(ortInput){
+      ortInput.value = 'Adresse wird ermittelt …';
+      lastServerValues['einsatzOrt'] = ortInput.value;
+    }
   }
 }
 
