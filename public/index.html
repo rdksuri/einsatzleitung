@@ -1129,6 +1129,20 @@ function findKategorieInText(text){
   return null;
 }
 
+// Entfernt das Kategorie-Alias aus dem erkannten Text, damit z.B. bei
+// "Front alle gesichtet" nicht nochmal "Front" im Eintragstext auftaucht -
+// die Kategorie steht ja schon im Auswahlfeld.
+function stripKategorieFromText(text, kategorie){
+  if(!kategorie) return text;
+  let result = text;
+  for(const alias of KATEGORIE_ALIASES[kategorie]){
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp('(^|\\s)' + escaped + '(?=\\s|$|[.,;:!?])', 'i');
+    result = result.replace(pattern, '$1');
+  }
+  return result.replace(/\s{2,}/g, ' ').trim().replace(/^[.,;:!?]\s*/, '');
+}
+
 function parseVoiceCommand(transcript){
   const norm = transcript.trim();
   let kategorie = null;
@@ -1152,12 +1166,15 @@ function parseVoiceCommand(transcript){
     if(cleaned) text = cleaned;
   }
 
+  text = stripKategorieFromText(text, kategorie);
   if(text) text = text.charAt(0).toUpperCase() + text.slice(1);
   return { kategorie, text };
 }
 
 let voiceRecognition = null;
 let voiceListening = false;
+let voiceManualStop = false;
+let voiceAccumulatedTranscript = '';
 
 function initVoiceInput(){
   const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1167,22 +1184,23 @@ function initVoiceInput(){
 
   voiceRecognition = new SpeechRecognitionCtor();
   voiceRecognition.lang = 'de-CH';
-  voiceRecognition.continuous = false;
-  voiceRecognition.interimResults = false;
+  // continuous:true haelt die Aufnahme ueber Sprechpausen hinweg am Laufen,
+  // statt (wie im Standardmodus) nach dem ersten erkannten Satz von selbst
+  // zu stoppen. Manche Browser beenden die Session trotzdem von sich aus
+  // nach laengerer Stille (z.B. "no-speech") - das wird unten transparent
+  // mit einem Neustart abgefangen, damit es sich fuer die Person wirklich
+  // wie eine durchgehende Aufnahme anfuehlt, die nur per Klick auf
+  // "Stopp" endet.
+  voiceRecognition.continuous = true;
+  voiceRecognition.interimResults = true;
 
   const btn = document.getElementById('btnVoiceInput');
   const statusEl = document.getElementById('voiceStatus');
   const transcriptEl = document.getElementById('voiceTranscript');
 
-  voiceRecognition.onstart = () => {
-    voiceListening = true;
-    btn.classList.add('listening');
-    btn.textContent = '⏹ Aufnahme stoppen';
-    statusEl.textContent = 'Höre zu ...';
-  };
-
-  voiceRecognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
+  function finalizeVoiceTranscript(){
+    const transcript = voiceAccumulatedTranscript.trim();
+    if(!transcript) return;
     const { kategorie, text } = parseVoiceCommand(transcript);
     if(kategorie){
       document.getElementById('logKategorie').value = kategorie;
@@ -1194,26 +1212,67 @@ function initVoiceInput(){
     transcriptEl.style.display = 'block';
     const kategorieLabel = kategorie ? LOG_KATEGORIE_LABELS[kategorie] : 'nicht erkannt - bitte manuell wählen';
     transcriptEl.textContent = `Erkannt: „${transcript}“ → Kategorie: ${kategorieLabel}`;
+  }
+
+  voiceRecognition.onstart = () => {
+    voiceListening = true;
+    btn.classList.add('listening');
+    btn.textContent = '⏹ Aufnahme stoppen';
+    statusEl.textContent = 'Höre zu ...';
+  };
+
+  voiceRecognition.onresult = (event) => {
+    let interim = '';
+    for(let i = event.resultIndex; i < event.results.length; i++){
+      const chunk = event.results[i][0].transcript;
+      if(event.results[i].isFinal){
+        voiceAccumulatedTranscript = (voiceAccumulatedTranscript + ' ' + chunk).trim();
+      } else {
+        interim += chunk;
+      }
+    }
+    statusEl.textContent = 'Höre zu ... ' + (voiceAccumulatedTranscript + ' ' + interim).trim();
   };
 
   voiceRecognition.onerror = (event) => {
+    // "no-speech"/"aborted" treten bei kontinuierlicher Aufnahme laufend
+    // bei kurzen Sprechpausen bzw. beim manuellen Stoppen auf - das ist
+    // normal, kein echter Fehler, und wird unten (onend) ggf. transparent
+    // mit einem Neustart abgefangen statt eine Fehlermeldung zu zeigen.
+    if(event.error === 'no-speech' || event.error === 'aborted') return;
+    voiceManualStop = true; // verhindert Neustart-Schleife bei echten Fehlern
     statusEl.textContent = event.error === 'not-allowed'
       ? 'Mikrofonzugriff verweigert.'
-      : 'Nicht verstanden, bitte erneut versuchen.';
+      : 'Fehler bei der Spracherkennung, bitte erneut versuchen.';
   };
 
   voiceRecognition.onend = () => {
+    if(!voiceManualStop){
+      // Browser hat die Aufnahme von sich aus beendet (z.B. laengere
+      // Stille) - nahtlos weiterhoeren, bis wirklich "Stopp" geklickt wird.
+      try{
+        voiceRecognition.start();
+        return;
+      }catch(e){
+        // Neustart fehlgeschlagen -> normal beenden und auswerten
+      }
+    }
     voiceListening = false;
     btn.classList.remove('listening');
     btn.textContent = '🎤 Sprachbefehl';
-    if(statusEl.textContent === 'Höre zu ...') statusEl.textContent = '';
+    if(statusEl.textContent.startsWith('Höre zu ...')) statusEl.textContent = '';
+    finalizeVoiceTranscript();
   };
 
   btn.addEventListener('click', () => {
     if(voiceListening){
+      voiceManualStop = true;
       voiceRecognition.stop();
     } else {
+      voiceManualStop = false;
+      voiceAccumulatedTranscript = '';
       statusEl.textContent = '';
+      transcriptEl.style.display = 'none';
       voiceRecognition.start();
     }
   });
