@@ -155,6 +155,12 @@
     cursor:crosshair;touch-action:none;
   }
 
+  .icon-legend-details{margin-top:10px;border-top:1px solid var(--line);padding-top:8px;}
+  .icon-legend-details summary{cursor:pointer;font-weight:700;font-size:13px;}
+  .icon-legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px 12px;margin-top:8px;}
+  .icon-legend-item{display:flex;align-items:center;gap:8px;font-size:12px;}
+  .icon-legend-icon{width:24px;height:28px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;position:relative;}
+  .icon-legend-zone{width:24px;height:16px;flex:0 0 auto;border-radius:2px;}
   .map-pin{width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
     background:var(--pin-color, var(--red));border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5);}
   .map-svg-icon{filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));}
@@ -380,6 +386,10 @@
               <button type="button" id="btnCancelZone" class="secondary" style="flex:1;">Abbrechen</button>
             </div>
           </div>
+          <details class="icon-legend-details">
+            <summary>Zeichenerklärung</summary>
+            <div class="icon-legend" id="iconLegend"></div>
+          </details>
         </div>
       </details>
     </div>
@@ -808,6 +818,24 @@ function makeSvgIcon(key){
 }
 function iconForMarkerType(key){
   return key === 'einsatzort' ? makePinIcon('var(--red)') : makeSvgIcon(key);
+}
+
+// Zeigt dieselben Symbole, die auch auf der Karte erscheinen (kein separates
+// Set von Buchstaben-Badges), damit die Legende immer zum tatsaechlichen
+// Kartenbild passt.
+function renderIconLegend(){
+  const el = document.getElementById('iconLegend');
+  if(!el) return;
+  let html = `<div class="icon-legend-item"><div class="icon-legend-icon"><div class="map-pin" style="--pin-color:var(--red);position:static;transform:rotate(-45deg);"></div></div>Einsatzort</div>`;
+  for(const key of Object.keys(MARKER_LABELS)){
+    if(key === 'einsatzort') continue;
+    const geo = MARKER_ICON_GEOMETRY[key];
+    html += `<div class="icon-legend-item"><div class="icon-legend-icon" style="width:${geo.size[0]}px;height:${geo.size[1]}px;">${MARKER_SVG[key]}</div>${MARKER_LABELS[key]}</div>`;
+  }
+  for(const key of Object.keys(ZONE_LABELS)){
+    html += `<div class="icon-legend-item"><div class="icon-legend-zone" style="background:${ZONE_COLORS[key]};opacity:0.6;"></div>${ZONE_LABELS[key]}</div>`;
+  }
+  el.innerHTML = html;
 }
 
 // Ausgelagert, damit sowohl der normale Karten-Klick als auch ein Klick auf
@@ -1702,6 +1730,7 @@ document.getElementById('detailsKarte').addEventListener('toggle', (e) => {
   initMap();
   initSkizze();
   initVoiceInput();
+  renderIconLegend();
   const token = getToken();
   const kuerzel = getKuerzel();
   if(token && kuerzel){
