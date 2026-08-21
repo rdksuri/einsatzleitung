@@ -181,6 +181,17 @@
   .glossary{margin-top:8px;display:flex;flex-direction:column;gap:8px;}
   .glossary-item{font-size:13px;line-height:1.4;}
   .glossary-term{font-family:var(--mono);font-weight:700;}
+  .address-field-wrap{position:relative;}
+  .address-suggestions{
+    position:absolute;top:100%;left:0;right:0;z-index:50;
+    background:var(--panel);border:1px solid var(--line);border-top:none;
+    max-height:220px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,0.15);
+  }
+  .address-suggestion-item{
+    padding:8px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line);
+  }
+  .address-suggestion-item:last-child{border-bottom:none;}
+  .address-suggestion-item:hover,.address-suggestion-item.active{background:var(--paper);}
   .map-pin{width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
     background:var(--pin-color, var(--red));border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5);}
   .map-svg-icon{filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));}
@@ -353,7 +364,10 @@
       <details id="detailsEinsatz">
         <summary>Einsatz</summary>
         <label for="einsatzOrt">Einsatzort</label>
-        <input type="text" id="einsatzOrt" placeholder="Adresse / Ortsbezeichnung">
+        <div class="address-field-wrap">
+          <input type="text" id="einsatzOrt" placeholder="Adresse / Ortsbezeichnung" autocomplete="off">
+          <div class="address-suggestions" id="einsatzOrtSuggestions" style="display:none;"></div>
+        </div>
         <label for="elsNummer">ELS-Nummer</label>
         <input type="text" id="elsNummer" placeholder="Einsatzleitsystem-Nr.">
         <div class="row2">
@@ -1355,6 +1369,47 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// --- Adress-Autocomplete fuer Einsatzort ---
+// Mehrdeutige Strassennamen (z.B. "Klausenstrasse" existiert in mehreren
+// Urner Gemeinden) sollen explizit ausgewaehlt werden koennen, statt dass
+// beim Speichern blind der erste Nominatim-Treffer genommen wird.
+let addressSearchTimer = null;
+let addressSearchAbort = null;
+
+async function fetchAddressSuggestions(query){
+  if(addressSearchAbort) addressSearchAbort.abort();
+  addressSearchAbort = new AbortController();
+  try{
+    const token = getToken();
+    const url = `/api/geocode-search?token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { signal: addressSearchAbort.signal });
+    if(!res.ok) return [];
+    const data = await res.json();
+    return data.results || [];
+  }catch(e){
+    return [];
+  }
+}
+
+function renderAddressSuggestions(results){
+  const el = document.getElementById('einsatzOrtSuggestions');
+  if(!results.length){
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = results.map(r =>
+    `<div class="address-suggestion-item" data-lat="${r.lat}" data-lng="${r.lng}">${escapeHtml(r.label)}</div>`
+  ).join('');
+  el.style.display = '';
+}
+
+function hideAddressSuggestions(){
+  const el = document.getElementById('einsatzOrtSuggestions');
+  el.style.display = 'none';
+  el.innerHTML = '';
+}
+
 // --- Actions ---
 function handleSaveEinsatz(){
   wsSend('einsatz:update', {
@@ -2273,6 +2328,33 @@ async function handleExportWord(){
 }
 
 // --- Init ---
+document.getElementById('einsatzOrt').addEventListener('input', (e) => {
+  const query = e.target.value.trim();
+  clearTimeout(addressSearchTimer);
+  if(query.length < 3){
+    hideAddressSuggestions();
+    return;
+  }
+  addressSearchTimer = setTimeout(async () => {
+    const results = await fetchAddressSuggestions(query);
+    renderAddressSuggestions(results);
+  }, 450);
+});
+document.getElementById('einsatzOrtSuggestions').addEventListener('mousedown', (e) => {
+  // mousedown statt click: feuert vor dem blur-Event des Inputs, sonst
+  // schliesst sich die Liste, bevor der Klick registriert wird.
+  const item = e.target.closest('.address-suggestion-item');
+  if(!item) return;
+  e.preventDefault();
+  setMarker('einsatzort', parseFloat(item.dataset.lat), parseFloat(item.dataset.lng));
+  hideAddressSuggestions();
+});
+document.getElementById('einsatzOrt').addEventListener('blur', () => {
+  setTimeout(hideAddressSuggestions, 150);
+});
+document.getElementById('einsatzOrt').addEventListener('keydown', (e) => {
+  if(e.key === 'Escape') hideAddressSuggestions();
+});
 document.getElementById('btnSaveEinsatz').addEventListener('click', handleSaveEinsatz);
 document.getElementById('btnSaveTriage').addEventListener('click', handleSaveTriage);
 document.getElementById('btnOpenSichtung').addEventListener('click', openSichtung);

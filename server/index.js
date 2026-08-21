@@ -4,8 +4,9 @@ const express = require("express");
 const http = require("http");
 const path = require("path");
 
-const { login } = require("./auth");
+const { login, verifyToken } = require("./auth");
 const { createWsHub } = require("./ws-hub");
+const { searchAddress } = require("./geocode");
 
 const app = express();
 app.use(express.json());
@@ -47,6 +48,22 @@ app.post("/api/login", rateLimitLogin, (req, res) => {
 });
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
+
+// Adress-Autocomplete fuer das Einsatzort-Feld: liefert mehrere Kandidaten
+// statt blind den ersten Treffer zu nehmen, damit mehrdeutige Strassennamen
+// (z.B. "Klausenstrasse" in mehreren Urner Gemeinden) explizit ausgewaehlt
+// werden koennen.
+app.get("/api/geocode-search", async (req, res) => {
+  if (!verifyToken(req.query.token)) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const q = String(req.query.q || "").trim();
+  if (q.length < 3) {
+    return res.json({ results: [] });
+  }
+  const results = await searchAddress(q, 5);
+  res.json({ results });
+});
 
 app.use(express.static(path.join(__dirname, "..", "public")));
 
