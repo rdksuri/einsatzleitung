@@ -562,8 +562,9 @@
         <div style="display:flex;flex-direction:column;gap:8px;">
           <button type="button" class="secondary" id="btnExportCsv">Verlauf als CSV</button>
           <button type="button" class="secondary" id="btnExportJson">Gesamter Einsatzstand als JSON</button>
+          <button type="button" class="secondary" id="btnExportWord">Rapport als Word-Dokument</button>
         </div>
-        <div class="field-note">CSV eignet sich fuer Excel/Rapport, JSON fuer ein vollstaendiges Backup.</div>
+        <div class="field-note">CSV eignet sich fuer Excel/Rapport, JSON fuer ein vollstaendiges Backup, Word fuer einen lesbaren Gesamtrapport mit Kartenpunkten, Zonen, Skizze und Fotos.</div>
       </details>
     </div>
 
@@ -1876,6 +1877,10 @@ function initVoiceInput(){
 function downloadFile(content, filename, mimeType, withBom){
   const parts = withBom ? ['﻿', content] : [content];
   const blob = new Blob(parts, { type: mimeType });
+  downloadBlob(blob, filename);
+}
+
+function downloadBlob(blob, filename){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -1914,6 +1919,194 @@ function handleExportJson(){
   downloadFile(JSON.stringify(state, null, 2), `einsatz-${state.id}.json`, 'application/json;charset=utf-8');
 }
 
+// --- Word-Export ---
+// Die docx-Bibliothek (~1MB) wird erst beim ersten Export nachgeladen statt
+// bei jedem Seitenaufruf, da sie nur fuer diesen einen Button gebraucht wird.
+let docxLibPromise = null;
+function loadDocxLib(){
+  if(window.docx) return Promise.resolve();
+  if(docxLibPromise) return docxLibPromise;
+  docxLibPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/docx@9.7.1/dist/index.umd.cjs';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Word-Bibliothek konnte nicht geladen werden (Internetverbindung?)'));
+    document.head.appendChild(script);
+  });
+  return docxLibPromise;
+}
+
+function dataUrlToUint8Array(dataUrl){
+  return fetch(dataUrl).then(r => r.arrayBuffer()).then(buf => new Uint8Array(buf));
+}
+
+function loadImageDimensions(dataUrl){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error('Bild konnte nicht gelesen werden'));
+    img.src = dataUrl;
+  });
+}
+
+function scaledImageSize(naturalWidth, naturalHeight, maxDim){
+  const scale = Math.min(1, maxDim / Math.max(naturalWidth, naturalHeight, 1));
+  return { width: Math.max(1, Math.round(naturalWidth * scale)), height: Math.max(1, Math.round(naturalHeight * scale)) };
+}
+
+function fmtLatLng(p){
+  return `${p.lat}, ${p.lng}`;
+}
+
+// Einfache zweispaltige (oder n-spaltige) Tabelle mit optionaler Kopfzeile -
+// deckt alle Uebersichtstabellen im Rapport ab (Einsatz, Triage, Fuehrung, Kartenpunkte).
+function buildSimpleTable(docx, rows, header){
+  const { Table, TableRow, TableCell, Paragraph, TextRun, WidthType } = docx;
+  const makeCell = (text, bold) => new TableCell({
+    width: { size: 100 / (rows[0] || header).length, type: WidthType.PERCENTAGE },
+    children: [new Paragraph({ children: [new TextRun({ text: String(text), bold: !!bold })] })],
+  });
+  const trRows = [];
+  if(header){
+    trRows.push(new TableRow({ children: header.map(h => makeCell(h, true)) }));
+  }
+  for(const row of rows){
+    trRows.push(new TableRow({ children: row.map(cell => makeCell(cell, false)) }));
+  }
+  return new Table({ rows: trRows, width: { size: 100, type: WidthType.PERCENTAGE } });
+}
+
+async function buildWordDocument(state){
+  const docx = window.docx;
+  const { Document, Paragraph, TextRun, HeadingLevel, ImageRun, Packer } = docx;
+  const children = [];
+
+  children.push(new Paragraph({ text: 'Einsatzrapport', heading: HeadingLevel.TITLE }));
+  children.push(new Paragraph({ text: `Einsatz-ID: ${state.id}` }));
+  children.push(new Paragraph({ text: `Exportiert: ${new Date().toLocaleString('de-CH')}` }));
+
+  children.push(new Paragraph({ text: 'Einsatz', heading: HeadingLevel.HEADING_1 }));
+  children.push(buildSimpleTable(docx, [
+    ['Ort', state.ort || '–'],
+    ['ELS-Nummer', state.elsNummer || '–'],
+    ['Status', state.status || '–'],
+    ['Anzahl Patienten', String(state.anzahlPatienten ?? 0)],
+  ]));
+
+  children.push(new Paragraph({ text: 'Sichtungskategorien', heading: HeadingLevel.HEADING_1 }));
+  const t = state.triage || {};
+  children.push(buildSimpleTable(docx, [
+    ['T1 (rot)', String(t.t1 ?? 0)],
+    ['T2 (gelb)', String(t.t2 ?? 0)],
+    ['T3 (grün)', String(t.t3 ?? 0)],
+    ['T4 (blau)', String(t.t4 ?? 0)],
+    ['Schwarz', String(t.schwarz ?? 0)],
+    ['Weiss', String(t.weiss ?? 0)],
+  ]));
+
+  children.push(new Paragraph({ text: 'Führungsstruktur', heading: HeadingLevel.HEADING_1 }));
+  const fu = state.fuehrung || {};
+  children.push(buildSimpleTable(docx, [
+    ['GEL', fu.gel || '–', fu.gelTel || '–'],
+    ['BL FW', fu.blFw || '–', fu.blFwTel || '–'],
+    ['BL SAN', fu.blSan || '–', fu.blSanTel || '–'],
+    ['BL POL', fu.blPol || '–', fu.blPolTel || '–'],
+    ['EL FW', fu.elFw || '–', fu.elFwTel || '–'],
+    ['EL SAN', fu.elSan || '–', fu.elSanTel || '–'],
+    ['EL POL', fu.elPol || '–', fu.elPolTel || '–'],
+    ['FU', fu.fu || '–', fu.fuTel || '–'],
+    ['Mediendienst', fu.mediendienst || '–', fu.mediendienstTel || '–'],
+  ], ['Rolle', 'Kürzel', 'Telefon']));
+
+  children.push(new Paragraph({ text: 'Kartenpunkte', heading: HeadingLevel.HEADING_1 }));
+  const markerRows = [];
+  if(state.bereitstellungsort) markerRows.push(['Bereitstellungsort', fmtLatLng(state.bereitstellungsort)]);
+  for(const key of Object.keys(MARKER_LABELS)){
+    const pos = state.markers && state.markers[key];
+    if(pos) markerRows.push([MARKER_LABELS[key], fmtLatLng(pos)]);
+  }
+  if(markerRows.length){
+    children.push(buildSimpleTable(docx, markerRows, ['Punkt', 'Koordinaten']));
+  } else {
+    children.push(new Paragraph({ text: 'Keine Kartenpunkte gesetzt.' }));
+  }
+
+  children.push(new Paragraph({ text: 'Zonen', heading: HeadingLevel.HEADING_1 }));
+  let anyZone = false;
+  for(const key of Object.keys(ZONE_LABELS)){
+    const points = state.zones && state.zones[key];
+    if(points && points.length){
+      anyZone = true;
+      children.push(new Paragraph({ children: [new TextRun({ text: `${ZONE_LABELS[key]} (${points.length} Punkte):`, bold: true })] }));
+      children.push(new Paragraph({ text: points.map(fmtLatLng).join(' ; ') }));
+    }
+  }
+  if(!anyZone) children.push(new Paragraph({ text: 'Keine Zonen eingezeichnet.' }));
+
+  children.push(new Paragraph({ text: 'Rettungsachse', heading: HeadingLevel.HEADING_1 }));
+  const routePoints = state.routes && state.routes.rettungsachse;
+  if(routePoints && routePoints.length){
+    children.push(new Paragraph({ text: `${routePoints.length} Punkte:` }));
+    children.push(new Paragraph({ text: routePoints.map(fmtLatLng).join(' ; ') }));
+  } else {
+    children.push(new Paragraph({ text: 'Keine Rettungsachse eingezeichnet.' }));
+  }
+
+  if(state.skizze){
+    children.push(new Paragraph({ text: 'Skizze', heading: HeadingLevel.HEADING_1 }));
+    const bytes = await dataUrlToUint8Array(state.skizze);
+    children.push(new Paragraph({
+      children: [new ImageRun({ type: 'png', data: bytes, transformation: { width: 480, height: 360 } })],
+    }));
+  }
+
+  children.push(new Paragraph({ text: 'Verlauf', heading: HeadingLevel.HEADING_1 }));
+  const entries = [...(state.log || [])].reverse(); // chronologisch aufsteigend
+  if(entries.length === 0){
+    children.push(new Paragraph({ text: 'Noch keine Einträge.' }));
+  }
+  for(const e of entries){
+    const zeit = new Date(e.zeit).toLocaleString('de-CH');
+    const kategorie = e.kategorie ? (LOG_KATEGORIE_LABELS[e.kategorie] || e.kategorie) : '';
+    const metaText = kategorie ? `${zeit} · ${e.person} · ${kategorie}` : `${zeit} · ${e.person}`;
+    children.push(new Paragraph({ children: [new TextRun({ text: metaText, bold: true })] }));
+    children.push(new Paragraph({ text: e.text }));
+    if(e.photo){
+      try{
+        const dims = await loadImageDimensions(e.photo);
+        const size = scaledImageSize(dims.width, dims.height, 220);
+        const bytes = await dataUrlToUint8Array(e.photo);
+        children.push(new Paragraph({
+          children: [new ImageRun({ type: 'jpg', data: bytes, transformation: size })],
+        }));
+      }catch(err){
+        children.push(new Paragraph({ text: '[Foto konnte nicht eingebettet werden]' }));
+      }
+    }
+  }
+
+  const doc = new Document({ sections: [{ children }] });
+  return Packer.toBlob(doc);
+}
+
+async function handleExportWord(){
+  if(!state) return;
+  const btn = document.getElementById('btnExportWord');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Erstelle Word-Dokument …';
+  try{
+    await loadDocxLib();
+    const blob = await buildWordDocument(state);
+    downloadBlob(blob, `einsatzrapport-${state.id}.docx`);
+  }catch(err){
+    alert('Word-Export fehlgeschlagen: ' + err.message);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
 // --- Init ---
 document.getElementById('btnSaveEinsatz').addEventListener('click', handleSaveEinsatz);
 document.getElementById('btnSaveTriage').addEventListener('click', handleSaveTriage);
@@ -1929,6 +2122,7 @@ document.getElementById('btnNewEinsatz').addEventListener('click', handleNewEins
 document.getElementById('btnAddLog').addEventListener('click', handleAddLog);
 document.getElementById('btnExportCsv').addEventListener('click', handleExportCsv);
 document.getElementById('btnExportJson').addEventListener('click', handleExportJson);
+document.getElementById('btnExportWord').addEventListener('click', handleExportWord);
 document.getElementById('btnLogin').addEventListener('click', handleLogin);
 document.getElementById('btnLogout').addEventListener('click', handleLogout);
 document.getElementById('loginPin').addEventListener('keydown', (e) => { if(e.key === 'Enter') handleLogin(); });
