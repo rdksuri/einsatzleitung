@@ -122,6 +122,12 @@
     cursor:pointer;flex:0 0 auto;
   }
   .zone-delete-btn:hover{background:var(--red);color:#fff;border-color:var(--red);}
+  .popup-delete-btn{
+    margin-top:6px;font-family:var(--mono);font-size:11px;font-weight:700;
+    padding:4px 8px;border:1px solid var(--red);background:var(--panel);color:var(--red);
+    cursor:pointer;
+  }
+  .popup-delete-btn:hover{background:var(--red);color:#fff;}
   #zoneDrawControls{flex:0 0 auto;display:flex;gap:4px;}
 
   .skizze-toolbar{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:10px;}
@@ -735,12 +741,15 @@ const MARKER_ICON_GEOMETRY = {
 function googleMapsNavUrl(lat, lng){
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
-function navPopupHtml(label, lat, lng){
+function navPopupHtml(label, lat, lng, clearType, clearKey){
   const heading = label ? `<strong>${label}</strong><br>` : '';
-  return `${heading}<a href="${googleMapsNavUrl(lat,lng)}" target="_blank" rel="noopener">In Google Maps navigieren</a>`;
+  const deleteBtn = clearType
+    ? `<br><button type="button" class="popup-delete-btn" data-clear-type="${clearType}" data-clear-key="${clearKey||''}">Marker löschen</button>`
+    : '';
+  return `${heading}<a href="${googleMapsNavUrl(lat,lng)}" target="_blank" rel="noopener">In Google Maps navigieren</a>${deleteBtn}`;
 }
-function attachNavPopup(m, label, lat, lng){
-  const html = navPopupHtml(label, lat, lng);
+function attachNavPopup(m, label, lat, lng, clearType, clearKey){
+  const html = navPopupHtml(label, lat, lng, clearType, clearKey);
   if(m.getPopup()){ m.setPopupContent(html); }
   else { m.bindPopup(html); }
 }
@@ -809,7 +818,7 @@ function placeBereitstellungsortMarker(lat, lng){
       wsSend('bereitstellungsort:set', {lat: p.lat, lng: p.lng});
     });
   }
-  attachNavPopup(marker, 'Bereitstellungsort', lat, lng);
+  attachNavPopup(marker, 'Bereitstellungsort', lat, lng, 'bereitstellungsort');
 }
 
 function setBereitstellungsort(lat, lng){
@@ -834,7 +843,7 @@ function placeMarker(key, lat, lng){
       setMarker(key, p.lat, p.lng);
     });
   }
-  attachNavPopup(markerRefs[key], MARKER_LABELS[key], lat, lng);
+  attachNavPopup(markerRefs[key], MARKER_LABELS[key], lat, lng, 'marker', key);
 }
 
 function setMarker(key, lat, lng){
@@ -1568,6 +1577,14 @@ document.getElementById('btnSaveFuehrung').addEventListener('click', handleSaveF
 document.addEventListener('click', (e) => {
   if(e.target && e.target.classList.contains('zone-delete-btn')){
     wsSend('zone:clear', {key: e.target.dataset.zoneDelete});
+  }
+  if(e.target && e.target.classList.contains('popup-delete-btn')){
+    if(e.target.dataset.clearType === 'bereitstellungsort'){
+      wsSend('bereitstellungsort:clear', {});
+    } else {
+      wsSend('marker:clear', {key: e.target.dataset.clearKey});
+    }
+    if(mapReady) map.closePopup();
   }
 });
 document.getElementById('logList').addEventListener('click', (e) => {

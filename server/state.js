@@ -194,6 +194,17 @@ function applyMutation(state, msg, kuerzel) {
       break;
     }
 
+    case "marker:clear": {
+      const key = payload.key;
+      if (!Object.prototype.hasOwnProperty.call(MARKER_LABELS, key)) {
+        throw new Error("Unbekannter Markertyp: " + key);
+      }
+      state.markers = state.markers || {};
+      state.markers[key] = null;
+      addLog(state, kuerzel, MARKER_LABELS[key] + " entfernt");
+      break;
+    }
+
     case "zone:set": {
       const key = payload.key;
       if (!Object.prototype.hasOwnProperty.call(ZONE_LABELS, key)) {
@@ -266,6 +277,12 @@ function applyMutation(state, msg, kuerzel) {
           ", " +
           state.bereitstellungsort.lng
       );
+      break;
+    }
+
+    case "bereitstellungsort:clear": {
+      state.bereitstellungsort = null;
+      addLog(state, kuerzel, "Bereitstellungsort entfernt");
       break;
     }
 
