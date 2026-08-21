@@ -1,6 +1,5 @@
 const MARKER_LABELS = {
   einsatzort: "Einsatzort",
-  rettungsachse: "Rettungsachse",
   warteraum: "Warteraum",
   helilandeplatz: "Heli-Landeplatz",
   patientensammelstelle: "Patientensammelstelle",
@@ -13,6 +12,13 @@ const ZONE_LABELS = {
   gefahrenzone: "Gefahrenzone",
   sperrzone: "Sperrzone",
   verkehrsumleitzone: "Verkehrsumleitzone",
+};
+
+// Rettungsachse ist keine einzelne Position mehr, sondern eine Strecke aus
+// mehreren Punkten (wie eine Zone, aber als offene Linie statt Flaeche) -
+// damit sie dem tatsaechlichen Strassenverlauf folgen kann.
+const ROUTE_LABELS = {
+  rettungsachse: "Rettungsachse",
 };
 
 const FUEHRUNG_FIELDS = {
@@ -47,7 +53,6 @@ function defaultState() {
     bereitstellungsort: null, // {lat, lng}
     markers: {
       einsatzort: null,
-      rettungsachse: null,
       warteraum: null,
       helilandeplatz: null,
       patientensammelstelle: null,
@@ -56,6 +61,7 @@ function defaultState() {
       sammelstelleunverletzte: null,
     }, // je {lat, lng}
     zones: { gefahrenzone: null, sperrzone: null, verkehrsumleitzone: null }, // je [{lat,lng}, ...] oder null
+    routes: { rettungsachse: null }, // je [{lat,lng}, ...] oder null
     fuehrung: {
       gel: "", gelTel: "",
       blFw: "", blFwTel: "",
@@ -241,6 +247,40 @@ function applyMutation(state, msg, kuerzel) {
       state.zones = state.zones || {};
       state.zones[key] = null;
       addLog(state, kuerzel, ZONE_LABELS[key] + " entfernt");
+      break;
+    }
+
+    case "route:set": {
+      const key = payload.key;
+      if (!Object.prototype.hasOwnProperty.call(ROUTE_LABELS, key)) {
+        throw new Error("Unbekannter Routentyp: " + key);
+      }
+      const rawPoints = Array.isArray(payload.points) ? payload.points : [];
+      if (rawPoints.length < 2) {
+        throw new Error("Eine Strecke braucht mindestens 2 Punkte");
+      }
+      const points = rawPoints.map((p) => {
+        const lat = Number(p.lat);
+        const lng = Number(p.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          throw new Error("Ungültige Koordinaten in Strecke");
+        }
+        return { lat: +lat.toFixed(6), lng: +lng.toFixed(6) };
+      });
+      state.routes = state.routes || {};
+      state.routes[key] = points;
+      addLog(state, kuerzel, ROUTE_LABELS[key] + " eingezeichnet (" + points.length + " Punkte)");
+      break;
+    }
+
+    case "route:clear": {
+      const key = payload.key;
+      if (!Object.prototype.hasOwnProperty.call(ROUTE_LABELS, key)) {
+        throw new Error("Unbekannter Routentyp: " + key);
+      }
+      state.routes = state.routes || {};
+      state.routes[key] = null;
+      addLog(state, kuerzel, ROUTE_LABELS[key] + " entfernt");
       break;
     }
 

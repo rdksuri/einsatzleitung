@@ -122,6 +122,12 @@
     cursor:pointer;flex:0 0 auto;
   }
   .zone-delete-btn:hover{background:var(--red);color:#fff;border-color:var(--red);}
+  .route-delete-btn{
+    font-family:var(--mono);font-weight:700;font-size:11px;
+    padding:6px 8px;border:1px solid var(--line);background:var(--panel);color:var(--red);
+    cursor:pointer;flex:0 0 auto;
+  }
+  .route-delete-btn:hover{background:var(--red);color:#fff;border-color:var(--red);}
   .popup-delete-btn{
     margin-top:6px;font-family:var(--mono);font-size:11px;font-weight:700;
     padding:4px 8px;border:1px solid var(--red);background:var(--panel);color:var(--red);
@@ -172,6 +178,7 @@
   .icon-legend-item{display:flex;align-items:center;gap:8px;font-size:12px;}
   .icon-legend-icon{width:24px;height:28px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;position:relative;}
   .icon-legend-zone{width:24px;height:16px;flex:0 0 auto;border-radius:2px;}
+  .icon-legend-route{width:24px;height:4px;flex:0 0 auto;border-radius:2px;align-self:center;}
   .glossary{margin-top:8px;display:flex;flex-direction:column;gap:8px;}
   .glossary-item{font-size:13px;line-height:1.4;}
   .glossary-term{font-family:var(--mono);font-weight:700;}
@@ -384,7 +391,6 @@
           <div class="marker-toolbar" id="markerToolbar">
             <button type="button" class="marker-btn" data-marker="bereitstellungsort"><span class="swatch" style="background:#3388ff;"></span>Bereitstellungsort</button>
             <button type="button" class="marker-btn active" data-marker="einsatzort"><span class="swatch" style="background:var(--red);"></span>Einsatzort</button>
-            <button type="button" class="marker-btn" data-marker="rettungsachse"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Rettungsachse</button>
             <button type="button" class="marker-btn" data-marker="warteraum"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Warteraum</button>
             <button type="button" class="marker-btn" data-marker="helilandeplatz"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Heli-Landeplatz</button>
             <button type="button" class="marker-btn" data-marker="patientensammelstelle"><span class="swatch" style="background:#eaf2fa;border-color:#2f6fa5;"></span>Patientensammelstelle</button>
@@ -394,6 +400,8 @@
           </div>
           <div class="coord" id="coordLabel">Bereitstellungsort: nicht gesetzt</div>
           <div class="marker-toolbar zone-toolbar" id="zoneToolbar">
+            <button type="button" class="marker-btn route-btn" data-route="rettungsachse" style="border-left:4px solid #0e88d3;">Rettungsachse</button>
+            <button type="button" class="route-delete-btn" data-route-delete="rettungsachse" style="display:none;" title="Rettungsachse entfernen">✕</button>
             <button type="button" class="marker-btn zone-btn" data-zone="gefahrenzone" style="border-left:4px solid #c8281f;">Gefahrenzone</button>
             <button type="button" class="zone-delete-btn" data-zone-delete="gefahrenzone" style="display:none;" title="Gefahrenzone entfernen">✕</button>
             <button type="button" class="marker-btn zone-btn" data-zone="sperrzone" style="border-left:4px solid #e8b923;">Sperrzone</button>
@@ -611,7 +619,7 @@ const RECONNECT_MAX_MS = 15000;
 
 let state = null;
 let map, marker;
-let markerRefs = {}; // key -> Leaflet marker instance (einsatzort, rettungsachse, warteraum, helilandeplatz)
+let markerRefs = {}; // key -> Leaflet marker instance (einsatzort, warteraum, helilandeplatz, ...)
 let activeMarkerType = 'einsatzort';
 let ws = null;
 let reconnectAttempts = 0;
@@ -753,7 +761,6 @@ let mapReady = false;
 
 const MARKER_LABELS = {
   einsatzort: 'Einsatzort',
-  rettungsachse: 'Rettungsachse',
   warteraum: 'Warteraum',
   helilandeplatz: 'Heli-Landeplatz',
   patientensammelstelle: 'Patientensammelstelle',
@@ -806,12 +813,6 @@ const MARKER_SVG = {
     <line x1="6" y1="20" x2="16" y2="20" stroke="${ICON_BLUE}" stroke-width="2.5"/>
     <circle cx="6" cy="27" r="4" fill="#fff" stroke="${ICON_BLUE}" stroke-width="2.5"/>
   </svg>`,
-  rettungsachse: `<svg viewBox="0 0 34 22" width="100%" height="100%">
-    <line x1="1" y1="11" x2="7" y2="11" stroke="${ICON_BLUE}" stroke-width="2.5"/>
-    <text x="15" y="16" font-family="Consolas, monospace" font-weight="700" font-size="14" fill="${ICON_BLUE}" text-anchor="middle">R</text>
-    <line x1="21" y1="11" x2="25" y2="11" stroke="${ICON_BLUE}" stroke-width="2.5"/>
-    <polygon points="25,5 25,17 33,11" fill="${ICON_BLUE}"/>
-  </svg>`,
 };
 // [Breite, Hoehe] und Ankerpunkt (der Punkt auf der Karte, den das Icon
 // markiert) je Symbol - passend zur jeweiligen viewBox oben.
@@ -822,7 +823,16 @@ const MARKER_ICON_GEOMETRY = {
   warteraum: { size: [24,28], anchor: [12,14] },
   helilandeplatz: { size: [24,28], anchor: [12,14] },
   kommandoposten: { size: [20,32], anchor: [6,27] },
-  rettungsachse: { size: [34,22], anchor: [17,11] },
+};
+
+// Rettungsachse: keine Einzelposition mehr, sondern eine Strecke aus mehreren
+// Punkten (wie eine Zone, aber offene Linie statt Flaeche) - siehe
+// Zonen-Zeichenlogik weiter unten fuer das analoge Routen-Pendant.
+const ROUTE_LABELS = {
+  rettungsachse: 'Rettungsachse',
+};
+const ROUTE_COLORS = {
+  rettungsachse: ICON_BLUE,
 };
 
 function googleMapsNavUrl(lat, lng){
@@ -894,6 +904,9 @@ function renderIconLegend(){
     const geo = MARKER_ICON_GEOMETRY[key];
     html += `<div class="icon-legend-item"><div class="icon-legend-icon" style="width:${geo.size[0]}px;height:${geo.size[1]}px;">${MARKER_SVG[key]}</div>${MARKER_LABELS[key]}</div>`;
   }
+  for(const key of Object.keys(ROUTE_LABELS)){
+    html += `<div class="icon-legend-item"><div class="icon-legend-route" style="background:${ROUTE_COLORS[key]};"></div>${ROUTE_LABELS[key]}</div>`;
+  }
   for(const key of Object.keys(ZONE_LABELS)){
     html += `<div class="icon-legend-item"><div class="icon-legend-zone" style="background:${ZONE_COLORS[key]};opacity:0.6;"></div>${ZONE_LABELS[key]}</div>`;
   }
@@ -906,6 +919,10 @@ function renderIconLegend(){
 function handleMapClick(e){
   if(drawingZone){
     addZonePoint(e.latlng.lat, e.latlng.lng);
+    return;
+  }
+  if(drawingRoute){
+    addRoutePoint(e.latlng.lat, e.latlng.lng);
     return;
   }
   if(activeMarkerType === 'bereitstellungsort'){
@@ -1011,6 +1028,7 @@ function refreshMarkerModeUI(){
 
 function setActiveMarkerType(type){
   cancelZoneDrawing();
+  cancelRouteDrawing();
   activeMarkerType = type;
   refreshMarkerModeUI();
 }
@@ -1033,6 +1051,7 @@ let drawingPreviewLayer = null;
 let zoneLayers = {}; // key -> L.polygon (fertig eingezeichnete Zonen)
 
 function startZoneDrawing(key){
+  cancelRouteDrawing();
   drawingZone = key;
   drawingPoints = [];
   if(drawingPreviewLayer){ map.removeLayer(drawingPreviewLayer); drawingPreviewLayer = null; }
@@ -1094,6 +1113,99 @@ function renderZones(){
       if(zoneLayers[key]){
         map.removeLayer(zoneLayers[key]);
         delete zoneLayers[key];
+      }
+      if(deleteBtn) deleteBtn.style.display = 'none';
+    }
+  }
+}
+
+// --- Routen (Linien: Rettungsachse) ---
+// Gleiches Klick-Zeichnen-Prinzip wie bei Zonen (siehe oben), aber als offene
+// Linie statt geschlossener Flaeche, damit sich die Rettungsachse dem
+// tatsaechlichen Strassenverlauf anpassen kann. Nutzt dieselben
+// Fertig/Abbrechen-Buttons (#zoneDrawControls) wie die Zonen, da immer nur
+// eines von beidem gleichzeitig gezeichnet wird.
+let drawingRoute = null; // Routentyp waehrend des Zeichnens, sonst null
+let drawingRoutePoints = [];
+let drawingRoutePreviewLayer = null;
+let routeLayers = {}; // key -> {casing, line} (fertig eingezeichnete Strecken)
+
+function startRouteDrawing(key){
+  cancelZoneDrawing();
+  drawingRoute = key;
+  drawingRoutePoints = [];
+  if(drawingRoutePreviewLayer){ map.removeLayer(drawingRoutePreviewLayer); drawingRoutePreviewLayer = null; }
+  document.querySelectorAll('.marker-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.route-btn[data-route="${key}"]`).classList.add('active');
+  document.getElementById('zoneDrawControls').style.display = 'flex';
+  const hint = document.getElementById('mapHint');
+  if(hint) hint.textContent = ROUTE_LABELS[key] + ': Punkte entlang der Strecke anklicken, dann "Fertig" (mind. 2 Punkte).';
+}
+
+function addRoutePoint(lat, lng){
+  drawingRoutePoints.push([lat, lng]);
+  if(drawingRoutePreviewLayer){ map.removeLayer(drawingRoutePreviewLayer); }
+  drawingRoutePreviewLayer = L.polyline(drawingRoutePoints, {color: ROUTE_COLORS[drawingRoute], weight:5, dashArray:'6,6'}).addTo(map);
+}
+
+function finishRouteDrawing(){
+  if(!drawingRoute) return;
+  if(drawingRoutePoints.length < 2){
+    alert('Mindestens 2 Punkte anklicken, um eine Strecke abzuschliessen.');
+    return;
+  }
+  wsSend('route:set', {key: drawingRoute, points: drawingRoutePoints.map(([lat,lng]) => ({lat,lng}))});
+  cancelRouteDrawing();
+}
+
+function cancelRouteDrawing(){
+  if(!drawingRoute && !drawingRoutePreviewLayer) return;
+  drawingRoute = null;
+  drawingRoutePoints = [];
+  if(drawingRoutePreviewLayer){ map.removeLayer(drawingRoutePreviewLayer); drawingRoutePreviewLayer = null; }
+  document.getElementById('zoneDrawControls').style.display = 'none';
+  document.querySelectorAll('.route-btn').forEach(b => b.classList.remove('active'));
+  refreshMarkerModeUI();
+}
+
+function handleFinishDrawing(){
+  if(drawingZone) finishZoneDrawing();
+  else if(drawingRoute) finishRouteDrawing();
+}
+
+function handleCancelDrawing(){
+  if(drawingZone) cancelZoneDrawing();
+  else if(drawingRoute) cancelRouteDrawing();
+}
+
+function renderRoutes(){
+  if(!mapReady) return;
+  for(const key of Object.keys(ROUTE_LABELS)){
+    const points = state.routes && state.routes[key];
+    const deleteBtn = document.querySelector(`.route-delete-btn[data-route-delete="${key}"]`);
+    if(points && points.length >= 2){
+      const latlngs = points.map(p => [p.lat, p.lng]);
+      if(routeLayers[key]){
+        routeLayers[key].casing.setLatLngs(latlngs);
+        routeLayers[key].line.setLatLngs(latlngs);
+      } else {
+        // Weisse "Casing"-Linie unter der farbigen Linie, damit die Strecke auf
+        // jedem Kartenhintergrund (Standard wie Satellit) gut sichtbar bleibt.
+        const casing = L.polyline(latlngs, {color:'#ffffff', weight:9, opacity:0.9, lineCap:'round', lineJoin:'round'}).addTo(map);
+        const line = L.polyline(latlngs, {color: ROUTE_COLORS[key], weight:5, opacity:1, lineCap:'round', lineJoin:'round'}).addTo(map);
+        line.bindTooltip(ROUTE_LABELS[key], {sticky:true, className:'map-label'});
+        // Kein Popup, gleiche Begruendung wie bei Zonen: ein Klick auf die
+        // Linie soll wie ein Klick auf die Karte darunter wirken.
+        casing.on('click', handleMapClick);
+        line.on('click', handleMapClick);
+        routeLayers[key] = { casing, line };
+      }
+      if(deleteBtn) deleteBtn.style.display = '';
+    } else {
+      if(routeLayers[key]){
+        map.removeLayer(routeLayers[key].casing);
+        map.removeLayer(routeLayers[key].line);
+        delete routeLayers[key];
       }
       if(deleteBtn) deleteBtn.style.display = 'none';
     }
@@ -1217,6 +1329,7 @@ function renderAll(){
   }
 
   renderZones();
+  renderRoutes();
   loadSkizzeFromState();
   renderLog();
 }
@@ -1825,12 +1938,18 @@ document.querySelectorAll('.marker-btn[data-marker]').forEach(btn => {
 document.querySelectorAll('.zone-btn').forEach(btn => {
   btn.addEventListener('click', () => startZoneDrawing(btn.dataset.zone));
 });
-document.getElementById('btnFinishZone').addEventListener('click', finishZoneDrawing);
-document.getElementById('btnCancelZone').addEventListener('click', cancelZoneDrawing);
+document.querySelectorAll('.route-btn').forEach(btn => {
+  btn.addEventListener('click', () => startRouteDrawing(btn.dataset.route));
+});
+document.getElementById('btnFinishZone').addEventListener('click', handleFinishDrawing);
+document.getElementById('btnCancelZone').addEventListener('click', handleCancelDrawing);
 document.getElementById('btnSaveFuehrung').addEventListener('click', handleSaveFuehrung);
 document.addEventListener('click', (e) => {
   if(e.target && e.target.classList.contains('zone-delete-btn')){
     wsSend('zone:clear', {key: e.target.dataset.zoneDelete});
+  }
+  if(e.target && e.target.classList.contains('route-delete-btn')){
+    wsSend('route:clear', {key: e.target.dataset.routeDelete});
   }
   if(e.target && e.target.classList.contains('popup-delete-btn')){
     if(e.target.dataset.clearType === 'bereitstellungsort'){
