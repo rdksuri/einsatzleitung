@@ -316,6 +316,7 @@
   <div class="status-row">
     <span><span class="dot" id="syncDot"></span><span id="syncLabel">verbunden</span></span>
     <span id="lastUpdate">–</span>
+    <span class="name-badge" id="onlineBadge" title="Wer ist online">Online: <strong id="onlineList">–</strong></span>
     <span class="name-badge">Kürzel: <strong id="kuerzelLabel">–</strong></span>
     <button class="logout-link" id="btnLogout">Abmelden</button>
   </div>
@@ -656,6 +657,8 @@ function connectWs(){
       state = msg.payload;
       renderAll();
       setSyncStatus('ok');
+    } else if(msg.type === 'presence:update'){
+      renderPresence(msg.payload?.online || []);
     } else if(msg.type === 'error'){
       console.error('Server-Fehler:', msg.payload?.message);
     }
@@ -704,6 +707,12 @@ function setSyncStatus(kind){
   dot.className = 'dot' + (kind==='error' ? ' off' : (kind==='stale' ? ' stale' : ''));
   label.textContent = kind==='error' ? 'getrennt' : (kind==='stale' ? 'verbinde…' : 'verbunden');
   document.getElementById('lastUpdate').textContent = state ? ('Update: ' + new Date(state.updatedAt).toLocaleTimeString('de-CH')) : '–';
+}
+
+function renderPresence(online){
+  const el = document.getElementById('onlineList');
+  if(!el) return;
+  el.textContent = online.length ? online.join(', ') : '–';
 }
 
 // --- Map ---

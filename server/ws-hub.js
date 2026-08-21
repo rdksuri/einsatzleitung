@@ -44,9 +44,19 @@ function createWsHub(server) {
     }
   }
 
+  // Wer ist online: pro Kuerzel nur einmal auffuehren, auch wenn dieselbe
+  // Person mit mehreren Tabs/Geraeten gleichzeitig verbunden ist.
+  function broadcastPresence() {
+    const online = [...new Set([...clients].map((ws) => ws.kuerzel))].sort();
+    for (const ws of clients) {
+      send(ws, "presence:update", { online });
+    }
+  }
+
   wss.on("connection", (ws) => {
     clients.add(ws);
     send(ws, "state:full", state);
+    broadcastPresence();
 
     ws.on("message", async (raw) => {
       let msg;
@@ -68,8 +78,14 @@ function createWsHub(server) {
       }
     });
 
-    ws.on("close", () => clients.delete(ws));
-    ws.on("error", () => clients.delete(ws));
+    ws.on("close", () => {
+      clients.delete(ws);
+      broadcastPresence();
+    });
+    ws.on("error", () => {
+      clients.delete(ws);
+      broadcastPresence();
+    });
   });
 
   return wss;
