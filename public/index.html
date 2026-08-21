@@ -1958,6 +1958,171 @@ function fmtLatLng(p){
   return `${p.lat}, ${p.lng}`;
 }
 
+// --- Kartenausschnitt als Bild (fuer den Word-Export) ---
+// Rendert einen eigenen Screenshot statt die sichtbare Leaflet-Karte
+// abzufotografieren: so laesst sich der Ausschnitt exakt so waehlen, dass
+// alle gesetzten Punkte/Zonen/Routen hineinpassen, unabhaengig vom aktuell
+// eingestellten Kartenausschnitt am Bildschirm. swisstopo-Kacheln erlauben
+// Cross-Origin-Zugriff (Access-Control-Allow-Origin: *), daher funktioniert
+// das direkte Nachladen per fetch() ohne "verunreinigten" Canvas.
+const MAP_TILE_SIZE = 256;
+
+function lonLatToWorldPixel(lat, lng, zoom){
+  const scale = MAP_TILE_SIZE * Math.pow(2, zoom);
+  const x = (lng + 180) / 360 * scale;
+  const sinLat = Math.sin(lat * Math.PI / 180);
+  const y = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale;
+  return { x, y };
+}
+
+function collectAllMapPoints(state){
+  const points = [];
+  if(state.bereitstellungsort) points.push(state.bereitstellungsort);
+  for(const key of Object.keys(MARKER_LABELS)){
+    const pos = state.markers && state.markers[key];
+    if(pos) points.push(pos);
+  }
+  for(const key of Object.keys(ZONE_LABELS)){
+    const zonePoints = state.zones && state.zones[key];
+    if(zonePoints) points.push(...zonePoints);
+  }
+  const routePoints = state.routes && state.routes.rettungsachse;
+  if(routePoints) points.push(...routePoints);
+  return points;
+}
+
+async function renderMapScreenshot(state, pixelWidth, pixelHeight){
+  const points = collectAllMapPoints(state);
+  if(points.length === 0) return null;
+
+  let minLat = Math.min(...points.map(p => p.lat));
+  let maxLat = Math.max(...points.map(p => p.lat));
+  let minLng = Math.min(...points.map(p => p.lng));
+  let maxLng = Math.max(...points.map(p => p.lng));
+  if(minLat === maxLat && minLng === maxLng){
+    // Nur ein einzelner Punkt: minimaler Ausschnitt drumherum statt Zoom 18
+    minLat -= 0.003; maxLat += 0.003;
+    minLng -= 0.003; maxLng += 0.003;
+  }
+
+  const PADDING = 50; // px Rand, damit Punkte nicht am Bildrand kleben
+  let zoom = 18;
+  for(; zoom >= 3; zoom--){
+    const topLeft = lonLatToWorldPixel(maxLat, minLng, zoom);
+    const bottomRight = lonLatToWorldPixel(minLat, maxLng, zoom);
+    if((bottomRight.x - topLeft.x) <= (pixelWidth - PADDING * 2) &&
+       (bottomRight.y - topLeft.y) <= (pixelHeight - PADDING * 2)){
+      break;
+    }
+  }
+
+  const centerPx = lonLatToWorldPixel((minLat + maxLat) / 2, (minLng + maxLng) / 2, zoom);
+  const originX = centerPx.x - pixelWidth / 2;
+  const originY = centerPx.y - pixelHeight / 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = pixelWidth;
+  canvas.height = pixelHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#eaf2fa';
+  ctx.fillRect(0, 0, pixelWidth, pixelHeight);
+
+  const firstTileX = Math.floor(originX / MAP_TILE_SIZE);
+  const firstTileY = Math.floor(originY / MAP_TILE_SIZE);
+  const lastTileX = Math.floor((originX + pixelWidth) / MAP_TILE_SIZE);
+  const lastTileY = Math.floor((originY + pixelHeight) / MAP_TILE_SIZE);
+  const maxTileIndex = Math.pow(2, zoom) - 1;
+
+  const tileJobs = [];
+  for(let tx = firstTileX; tx <= lastTileX; tx++){
+    for(let ty = firstTileY; ty <= lastTileY; ty++){
+      if(tx < 0 || ty < 0 || tx > maxTileIndex || ty > maxTileIndex) continue;
+      const url = `https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/${zoom}/${tx}/${ty}.jpeg`;
+      const destX = tx * MAP_TILE_SIZE - originX;
+      const destY = ty * MAP_TILE_SIZE - originY;
+      tileJobs.push(
+        fetch(url)
+          .then(r => r.blob())
+          .then(blob => createImageBitmap(blob))
+          .then(bitmap => ctx.drawImage(bitmap, destX, destY, MAP_TILE_SIZE, MAP_TILE_SIZE))
+          .catch(() => {}) // einzelne fehlende Kachel soll den Rest nicht blockieren
+      );
+    }
+  }
+  await Promise.all(tileJobs);
+
+  function toCanvasXY(lat, lng){
+    const p = lonLatToWorldPixel(lat, lng, zoom);
+    return { x: p.x - originX, y: p.y - originY };
+  }
+
+  for(const key of Object.keys(ZONE_LABELS)){
+    const zonePoints = state.zones && state.zones[key];
+    if(zonePoints && zonePoints.length >= 3){
+      ctx.beginPath();
+      zonePoints.forEach((p, i) => {
+        const { x, y } = toCanvasXY(p.lat, p.lng);
+        if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = ZONE_COLORS[key] + '55';
+      ctx.fill();
+      ctx.strokeStyle = ZONE_COLORS[key];
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+  }
+
+  const routePoints = state.routes && state.routes.rettungsachse;
+  if(routePoints && routePoints.length >= 2){
+    const drawRoutePath = () => {
+      ctx.beginPath();
+      routePoints.forEach((p, i) => {
+        const { x, y } = toCanvasXY(p.lat, p.lng);
+        if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+    };
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    drawRoutePath();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    drawRoutePath();
+    ctx.strokeStyle = ROUTE_COLORS.rettungsachse;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }
+
+  function drawPointMarker(lat, lng, color, label){
+    const { x, y } = toCanvasXY(lat, lng);
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    if(label){
+      ctx.font = 'bold 13px sans-serif';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeText(label, x + 12, y + 4);
+      ctx.fillStyle = '#1b1d1c';
+      ctx.fillText(label, x + 12, y + 4);
+    }
+  }
+  if(state.bereitstellungsort){
+    drawPointMarker(state.bereitstellungsort.lat, state.bereitstellungsort.lng, '#3388ff', 'Bereitstellungsort');
+  }
+  for(const key of Object.keys(MARKER_LABELS)){
+    const pos = state.markers && state.markers[key];
+    if(pos) drawPointMarker(pos.lat, pos.lng, key === 'einsatzort' ? '#c8281f' : ICON_BLUE, MARKER_LABELS[key]);
+  }
+
+  return canvas;
+}
+
 // Einfache zweispaltige (oder n-spaltige) Tabelle mit optionaler Kopfzeile -
 // deckt alle Uebersichtstabellen im Rapport ab (Einsatz, Triage, Fuehrung, Kartenpunkte).
 function buildSimpleTable(docx, rows, header){
@@ -2029,6 +2194,23 @@ async function buildWordDocument(state){
     children.push(buildSimpleTable(docx, markerRows, ['Punkt', 'Koordinaten']));
   } else {
     children.push(new Paragraph({ text: 'Keine Kartenpunkte gesetzt.' }));
+  }
+
+  children.push(new Paragraph({ text: 'Kartenausschnitt', heading: HeadingLevel.HEADING_1 }));
+  try{
+    const mapCanvas = await renderMapScreenshot(state, 900, 650);
+    if(mapCanvas){
+      const bytes = await dataUrlToUint8Array(mapCanvas.toDataURL('image/png'));
+      const displayWidth = 500;
+      const displayHeight = Math.round(displayWidth * mapCanvas.height / mapCanvas.width);
+      children.push(new Paragraph({
+        children: [new ImageRun({ type: 'png', data: bytes, transformation: { width: displayWidth, height: displayHeight } })],
+      }));
+    } else {
+      children.push(new Paragraph({ text: 'Keine Kartenpunkte gesetzt, kein Kartenausschnitt verfügbar.' }));
+    }
+  }catch(err){
+    children.push(new Paragraph({ text: '[Kartenausschnitt konnte nicht erstellt werden]' }));
   }
 
   children.push(new Paragraph({ text: 'Zonen', heading: HeadingLevel.HEADING_1 }));
