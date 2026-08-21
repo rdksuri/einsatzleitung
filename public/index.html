@@ -147,7 +147,6 @@
   .photo-lightbox{position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out;padding:20px;}
   .photo-lightbox img{max-width:92vw;max-height:92vh;object-fit:contain;}
   input.field-dirty,select.field-dirty{border-color:var(--amber);background:#fdf6e3;}
-  #zoneDrawControls{flex:0 0 auto;display:flex;gap:4px;}
 
   .skizze-toolbar{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:10px;}
   .skizze-tools, .skizze-colors, .skizze-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
@@ -408,10 +407,6 @@
             <button type="button" class="zone-delete-btn" data-zone-delete="sperrzone" style="display:none;" title="Sperrzone entfernen">✕</button>
             <button type="button" class="marker-btn zone-btn" data-zone="verkehrsumleitzone" style="border-left:4px solid #3d6b3a;">Verkehrsumleitzone</button>
             <button type="button" class="zone-delete-btn" data-zone-delete="verkehrsumleitzone" style="display:none;" title="Verkehrsumleitzone entfernen">✕</button>
-            <div id="zoneDrawControls" style="display:none;gap:4px;">
-              <button type="button" id="btnFinishZone" class="secondary" style="flex:1;">Fertig</button>
-              <button type="button" id="btnCancelZone" class="secondary" style="flex:1;">Abbrechen</button>
-            </div>
           </div>
           <details class="icon-legend-details">
             <summary>Zeichenerklärung</summary>
@@ -1058,25 +1053,19 @@ function startZoneDrawing(key){
   if(drawingPreviewLayer){ map.removeLayer(drawingPreviewLayer); drawingPreviewLayer = null; }
   document.querySelectorAll('.marker-btn').forEach(b => b.classList.remove('active'));
   document.querySelector(`.zone-btn[data-zone="${key}"]`).classList.add('active');
-  document.getElementById('zoneDrawControls').style.display = 'flex';
   const hint = document.getElementById('mapHint');
-  if(hint) hint.textContent = ZONE_LABELS[key] + ': Punkte auf der Karte anklicken, dann "Fertig" (mind. 3 Punkte).';
+  if(hint) hint.textContent = ZONE_LABELS[key] + ': Punkte anklicken (mind. 3) - wird automatisch gespeichert. Anderes Werkzeug waehlen zum Beenden.';
 }
 
 function addZonePoint(lat, lng){
   drawingPoints.push([lat, lng]);
   if(drawingPreviewLayer){ map.removeLayer(drawingPreviewLayer); }
   drawingPreviewLayer = L.polygon(drawingPoints, {color: ZONE_COLORS[drawingZone], fillOpacity:0.25, dashArray:'4,4'}).addTo(map);
-}
-
-function finishZoneDrawing(){
-  if(!drawingZone) return;
-  if(drawingPoints.length < 3){
-    alert('Mindestens 3 Punkte anklicken, um eine Zone abzuschliessen.');
-    return;
+  // Ab dem dritten Punkt automatisch speichern - kein separater
+  // "Fertig"-Klick noetig, jeder weitere Punkt aktualisiert die Zone live.
+  if(drawingPoints.length >= 3){
+    wsSend('zone:set', {key: drawingZone, points: drawingPoints.map(([lat,lng]) => ({lat,lng}))});
   }
-  wsSend('zone:set', {key: drawingZone, points: drawingPoints.map(([lat,lng]) => ({lat,lng}))});
-  cancelZoneDrawing();
 }
 
 function cancelZoneDrawing(){
@@ -1084,7 +1073,6 @@ function cancelZoneDrawing(){
   drawingZone = null;
   drawingPoints = [];
   if(drawingPreviewLayer){ map.removeLayer(drawingPreviewLayer); drawingPreviewLayer = null; }
-  document.getElementById('zoneDrawControls').style.display = 'none';
   document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('active'));
   refreshMarkerModeUI();
 }
@@ -1123,9 +1111,7 @@ function renderZones(){
 // --- Routen (Linien: Rettungsachse) ---
 // Gleiches Klick-Zeichnen-Prinzip wie bei Zonen (siehe oben), aber als offene
 // Linie statt geschlossener Flaeche, damit sich die Rettungsachse dem
-// tatsaechlichen Strassenverlauf anpassen kann. Nutzt dieselben
-// Fertig/Abbrechen-Buttons (#zoneDrawControls) wie die Zonen, da immer nur
-// eines von beidem gleichzeitig gezeichnet wird.
+// tatsaechlichen Strassenverlauf anpassen kann.
 let drawingRoute = null; // Routentyp waehrend des Zeichnens, sonst null
 let drawingRoutePoints = [];
 let drawingRoutePreviewLayer = null;
@@ -1138,25 +1124,19 @@ function startRouteDrawing(key){
   if(drawingRoutePreviewLayer){ map.removeLayer(drawingRoutePreviewLayer); drawingRoutePreviewLayer = null; }
   document.querySelectorAll('.marker-btn').forEach(b => b.classList.remove('active'));
   document.querySelector(`.route-btn[data-route="${key}"]`).classList.add('active');
-  document.getElementById('zoneDrawControls').style.display = 'flex';
   const hint = document.getElementById('mapHint');
-  if(hint) hint.textContent = ROUTE_LABELS[key] + ': Punkte entlang der Strecke anklicken, dann "Fertig" (mind. 2 Punkte).';
+  if(hint) hint.textContent = ROUTE_LABELS[key] + ': Punkte entlang der Strecke anklicken (mind. 2) - wird automatisch gespeichert. Anderes Werkzeug waehlen zum Beenden.';
 }
 
 function addRoutePoint(lat, lng){
   drawingRoutePoints.push([lat, lng]);
   if(drawingRoutePreviewLayer){ map.removeLayer(drawingRoutePreviewLayer); }
   drawingRoutePreviewLayer = L.polyline(drawingRoutePoints, {color: ROUTE_COLORS[drawingRoute], weight:5, dashArray:'6,6'}).addTo(map);
-}
-
-function finishRouteDrawing(){
-  if(!drawingRoute) return;
-  if(drawingRoutePoints.length < 2){
-    alert('Mindestens 2 Punkte anklicken, um eine Strecke abzuschliessen.');
-    return;
+  // Ab dem zweiten Punkt automatisch speichern - kein separater
+  // "Fertig"-Klick noetig, jeder weitere Punkt aktualisiert die Strecke live.
+  if(drawingRoutePoints.length >= 2){
+    wsSend('route:set', {key: drawingRoute, points: drawingRoutePoints.map(([lat,lng]) => ({lat,lng}))});
   }
-  wsSend('route:set', {key: drawingRoute, points: drawingRoutePoints.map(([lat,lng]) => ({lat,lng}))});
-  cancelRouteDrawing();
 }
 
 function cancelRouteDrawing(){
@@ -1164,19 +1144,8 @@ function cancelRouteDrawing(){
   drawingRoute = null;
   drawingRoutePoints = [];
   if(drawingRoutePreviewLayer){ map.removeLayer(drawingRoutePreviewLayer); drawingRoutePreviewLayer = null; }
-  document.getElementById('zoneDrawControls').style.display = 'none';
   document.querySelectorAll('.route-btn').forEach(b => b.classList.remove('active'));
   refreshMarkerModeUI();
-}
-
-function handleFinishDrawing(){
-  if(drawingZone) finishZoneDrawing();
-  else if(drawingRoute) finishRouteDrawing();
-}
-
-function handleCancelDrawing(){
-  if(drawingZone) cancelZoneDrawing();
-  else if(drawingRoute) cancelRouteDrawing();
 }
 
 function renderRoutes(){
@@ -2312,13 +2281,20 @@ document.querySelectorAll('.marker-btn[data-marker]').forEach(btn => {
   btn.addEventListener('click', () => setActiveMarkerType(btn.dataset.marker));
 });
 document.querySelectorAll('.zone-btn').forEach(btn => {
-  btn.addEventListener('click', () => startZoneDrawing(btn.dataset.zone));
+  // Erneuter Klick auf den bereits aktiven Zonen-Button beendet das Zeichnen -
+  // das ersetzt den frueheren "Fertig"-Button, da jeder Punkt schon beim
+  // Anklicken automatisch gespeichert wird.
+  btn.addEventListener('click', () => {
+    if(drawingZone === btn.dataset.zone) cancelZoneDrawing();
+    else startZoneDrawing(btn.dataset.zone);
+  });
 });
 document.querySelectorAll('.route-btn').forEach(btn => {
-  btn.addEventListener('click', () => startRouteDrawing(btn.dataset.route));
+  btn.addEventListener('click', () => {
+    if(drawingRoute === btn.dataset.route) cancelRouteDrawing();
+    else startRouteDrawing(btn.dataset.route);
+  });
 });
-document.getElementById('btnFinishZone').addEventListener('click', handleFinishDrawing);
-document.getElementById('btnCancelZone').addEventListener('click', handleCancelDrawing);
 document.getElementById('btnSaveFuehrung').addEventListener('click', handleSaveFuehrung);
 document.addEventListener('click', (e) => {
   if(e.target && e.target.classList.contains('zone-delete-btn')){
