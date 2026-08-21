@@ -65,6 +65,26 @@ app.get("/api/geocode-search", async (req, res) => {
   res.json({ results });
 });
 
+// TEMPORAER: rohe Diagnose, ob der Server ueberhaupt bis zu Nominatim
+// durchkommt (Render blockt manchmal automatisierten Traffic von
+// Cloud-IP-Bereichen). Wieder entfernen, sobald das Geocoding zuverlaessig
+// laeuft.
+app.get("/api/geocode-debug", async (req, res) => {
+  if (!verifyToken(req.query.token)) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  try {
+    const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=Zurich", {
+      headers: { "User-Agent": "Einsatzleitung-App (https://github.com/rdksuri/einsatzleitung)" },
+      signal: AbortSignal.timeout(8000),
+    });
+    const text = await r.text();
+    res.json({ ok: true, status: r.status, bodyPreview: text.slice(0, 300) });
+  } catch (e) {
+    res.json({ ok: false, errorName: e.name, errorMessage: e.message });
+  }
+});
+
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 const server = http.createServer(app);

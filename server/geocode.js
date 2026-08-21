@@ -60,7 +60,10 @@ async function searchAddress(query, limit) {
       headers: { "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error("[geocode] Nominatim search antwortete mit Status " + res.status);
+      return [];
+    }
     const data = await res.json();
     if (!Array.isArray(data)) return [];
     const seen = new Set();
@@ -78,6 +81,7 @@ async function searchAddress(query, limit) {
     }
     return results;
   } catch (e) {
+    console.error("[geocode] Nominatim search fehlgeschlagen: " + e.message);
     return [];
   }
 }
