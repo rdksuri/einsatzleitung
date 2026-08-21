@@ -2,7 +2,7 @@ const { WebSocketServer } = require("ws");
 const { verifyToken } = require("./auth");
 const { loadState, saveState } = require("./db");
 const { defaultState, applyMutation } = require("./state");
-const { reverseGeocode } = require("./geocode");
+const { reverseGeocode, geocodeAddress } = require("./geocode");
 
 function createWsHub(server) {
   let state = loadState() || defaultState();
@@ -70,6 +70,20 @@ function createWsHub(server) {
         if (msg.type === "marker:set" && msg.payload?.key === "einsatzort") {
           const address = await reverseGeocode(msg.payload.lat, msg.payload.lng);
           msg = { ...msg, payload: { ...msg.payload, address } };
+        }
+        if (msg.type === "einsatz:update" && typeof msg.payload?.ort === "string") {
+          // Gegenrichtung zum Pin-Setzen: eine manuell eingetippte, geaenderte
+          // Adresse setzt den Einsatzort-Pin automatisch mit. Nur bei
+          // tatsaechlicher Aenderung geocodieren, sonst wuerde ein bereits per
+          // Pin praezise gesetzter Ort bei jedem Speichern (z.B. nur wegen
+          // ELS-Nummer/Status) leicht verschoben werden.
+          const newOrt = msg.payload.ort.trim();
+          if (newOrt && newOrt !== state.ort) {
+            const coords = await geocodeAddress(newOrt);
+            if (coords) {
+              msg = { ...msg, payload: { ...msg.payload, einsatzortCoords: coords } };
+            }
+          }
         }
         state = applyMutation(state, msg, ws.kuerzel);
         broadcastState();

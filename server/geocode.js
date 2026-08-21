@@ -37,4 +37,29 @@ async function reverseGeocode(lat, lng) {
   }
 }
 
-module.exports = { reverseGeocode };
+// Gegenrichtung zu reverseGeocode(): loest eine manuell eingetippte Adresse
+// in Koordinaten auf, damit der Einsatzort-Pin automatisch mitgesetzt werden
+// kann. Auf die Schweiz eingeschraenkt (countrycodes=ch), da die App auf
+// kantonale Einsaetze ausgelegt ist.
+async function geocodeAddress(address) {
+  try {
+    const url =
+      "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=ch&q=" +
+      encodeURIComponent(address);
+    const res = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+    const lat = Number(data[0].lat);
+    const lng = Number(data[0].lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
+  } catch (e) {
+    return null;
+  }
+}
+
+module.exports = { reverseGeocode, geocodeAddress };

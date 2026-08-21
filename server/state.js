@@ -148,6 +148,17 @@ function applyMutation(state, msg, kuerzel) {
         weiss: clampInt(payload.triage?.weiss, state.triage.weiss),
       };
       state.anzahlPatienten = computeAnzahlPatienten(state.triage);
+      // Gegenrichtung zum Pin-Setzen: eine geaenderte Adresse, die sich
+      // erfolgreich geocodieren liess, setzt den Einsatzort-Pin automatisch
+      // mit (siehe ws-hub.js, wo einsatzortCoords ermittelt wird).
+      if (payload.einsatzortCoords) {
+        const lat = Number(payload.einsatzortCoords.lat);
+        const lng = Number(payload.einsatzortCoords.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          state.markers = state.markers || {};
+          state.markers.einsatzort = { lat: +lat.toFixed(6), lng: +lng.toFixed(6) };
+        }
+      }
       addLog(state, kuerzel, "Einsatzdaten aktualisiert (Status: " + state.status + ")");
       break;
     }
