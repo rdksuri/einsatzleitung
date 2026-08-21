@@ -129,6 +129,17 @@
   }
   .popup-delete-btn:hover{background:var(--red);color:#fff;}
   .unsaved-badge{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--amber);}
+  .log-photo-row{margin-top:8px;display:flex;align-items:center;gap:10px;}
+  #logPhotoPreviewWrap{position:relative;flex:0 0 auto;}
+  #logPhotoPreview{max-width:64px;max-height:64px;border-radius:4px;border:1px solid var(--line);display:block;}
+  #btnRemovePhoto{
+    position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;
+    background:var(--red);color:#fff;border:2px solid var(--panel);cursor:pointer;
+    font-weight:700;line-height:1;padding:0;
+  }
+  .log-photo-thumb{max-width:120px;max-height:120px;border-radius:4px;border:1px solid var(--line);margin-top:6px;cursor:zoom-in;display:block;}
+  .photo-lightbox{position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out;padding:20px;}
+  .photo-lightbox img{max-width:92vw;max-height:92vh;object-fit:contain;}
   input.field-dirty,select.field-dirty{border-color:var(--amber);background:#fdf6e3;}
   #zoneDrawControls{flex:0 0 auto;display:flex;gap:4px;}
 
@@ -306,6 +317,10 @@
       <button type="button" class="sichtung-minus" data-tri-minus="weiss" title="Korrektur: -1">−1</button>
     </div>
   </div>
+</div>
+
+<div class="photo-lightbox" id="photoLightbox" style="display:none;">
+  <img id="photoLightboxImg" alt="Foto">
 </div>
 
 <header>
@@ -515,6 +530,14 @@
           <option value="mobsanhist">MobSanHist</option>
         </select>
         <textarea id="logText" placeholder="Beobachtung, Massnahme, Meldung ..."></textarea>
+        <div class="log-photo-row">
+          <button type="button" class="secondary" id="btnAttachPhoto">📷 Foto anhängen</button>
+          <input type="file" accept="image/*" capture="environment" id="logPhotoInput" style="display:none;">
+          <div id="logPhotoPreviewWrap" style="display:none;">
+            <img id="logPhotoPreview" alt="Vorschau">
+            <button type="button" id="btnRemovePhoto" title="Foto entfernen">✕</button>
+          </div>
+        </div>
         <div style="margin-top:10px;">
           <button id="btnAddLog">Eintrag senden</button>
         </div>
@@ -1182,10 +1205,12 @@ function renderLog(){
   let html = visible.map(e => {
     const kategorieLabel = e.kategorie ? LOG_KATEGORIE_LABELS[e.kategorie] : null;
     const kategorieTag = kategorieLabel ? ` · <span class="log-kategorie">${escapeHtml(kategorieLabel)}</span>` : '';
+    const photoTag = e.photo ? `<img class="log-photo-thumb" src="${e.photo}" alt="Foto zum Eintrag">` : '';
     return `
       <div class="log-entry">
         <div class="meta">${new Date(e.zeit).toLocaleTimeString('de-CH')} · ${escapeHtml(e.person)}${kategorieTag}</div>
         <div class="text">${escapeHtml(e.text)}</div>
+        ${photoTag}
       </div>
     `;
   }).join('');
@@ -1291,6 +1316,71 @@ function handleNewEinsatz(){
   wsSend('einsatz:new', {});
 }
 
+// --- Foto-Anhang fuer Verlauf-Eintraege ---
+// Wird vor dem Senden im Browser auf max. 1280px verkleinert und als JPEG
+// komprimiert, damit Fotos direkt vom Handy (oft mehrere MB) nicht
+// ungebremst in der (ohnehin schon begrenzten) SQLite-Datenbank landen.
+let pendingLogPhoto = null;
+
+function readAndCompressImage(file, maxDim, quality){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Bild konnte nicht gelesen werden'));
+      img.onload = () => {
+        let { width, height } = img;
+        if(width > maxDim || height > maxDim){
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function showLogPhotoPreview(dataUrl){
+  document.getElementById('logPhotoPreview').src = dataUrl;
+  document.getElementById('logPhotoPreviewWrap').style.display = '';
+}
+
+function clearLogPhoto(){
+  pendingLogPhoto = null;
+  document.getElementById('logPhotoPreview').src = '';
+  document.getElementById('logPhotoPreviewWrap').style.display = 'none';
+}
+
+async function handleLogPhotoSelected(e){
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  try{
+    pendingLogPhoto = await readAndCompressImage(file, 1280, 0.7);
+    showLogPhotoPreview(pendingLogPhoto);
+  }catch(err){
+    alert('Foto konnte nicht verarbeitet werden: ' + err.message);
+  }
+}
+
+function openPhotoLightbox(src){
+  document.getElementById('photoLightboxImg').src = src;
+  document.getElementById('photoLightbox').style.display = 'flex';
+}
+
+function closePhotoLightbox(){
+  document.getElementById('photoLightbox').style.display = 'none';
+  document.getElementById('photoLightboxImg').src = '';
+}
+
 function handleAddLog(){
   const textEl = document.getElementById('logText');
   const kategorieEl = document.getElementById('logKategorie');
@@ -1303,9 +1393,10 @@ function handleAddLog(){
   }
   if(!text) return;
   errorEl.textContent = '';
-  wsSend('log:add', { text, kategorie });
+  wsSend('log:add', { text, kategorie, photo: pendingLogPhoto || undefined });
   textEl.value = '';
   kategorieEl.value = '';
+  clearLogPhoto();
   const transcriptEl = document.getElementById('voiceTranscript');
   transcriptEl.style.display = 'none';
   transcriptEl.textContent = '';
@@ -1656,12 +1747,12 @@ function csvEscape(value){
 
 function handleExportCsv(){
   if(!state) return;
-  const rows = [['Zeit', 'Kürzel', 'Kategorie', 'Text']];
+  const rows = [['Zeit', 'Kürzel', 'Kategorie', 'Text', 'Foto']];
   const entries = [...(state.log || [])].reverse(); // chronologisch aufsteigend
   for(const e of entries){
     const zeit = new Date(e.zeit).toLocaleString('de-CH');
     const kategorie = e.kategorie ? (LOG_KATEGORIE_LABELS[e.kategorie] || e.kategorie) : '';
-    rows.push([zeit, e.person, kategorie, e.text]);
+    rows.push([zeit, e.person, kategorie, e.text, e.photo ? 'Ja' : '']);
   }
   // Semikolon als Trennzeichen, da Excel in DE-CH-Gebietsschemas Komma als
   // Dezimaltrennzeichen erwartet.
@@ -1719,7 +1810,16 @@ document.getElementById('logList').addEventListener('click', (e) => {
     logExpanded = !logExpanded;
     renderLog();
   }
+  if(e.target && e.target.classList.contains('log-photo-thumb')){
+    openPhotoLightbox(e.target.src);
+  }
 });
+document.getElementById('btnAttachPhoto').addEventListener('click', () => {
+  document.getElementById('logPhotoInput').click();
+});
+document.getElementById('logPhotoInput').addEventListener('change', handleLogPhotoSelected);
+document.getElementById('btnRemovePhoto').addEventListener('click', clearLogPhoto);
+document.getElementById('photoLightbox').addEventListener('click', closePhotoLightbox);
 document.getElementById('logFilterKategorie').addEventListener('change', () => {
   logExpanded = false;
   renderLog();

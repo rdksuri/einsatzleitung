@@ -94,12 +94,17 @@ function computeAnzahlPatienten(triage) {
   );
 }
 
-function addLog(state, person, text, kategorie) {
+function addLog(state, person, text, kategorie, photo) {
   state.log = state.log || [];
   const entry = { zeit: Date.now(), person, text };
   if (kategorie) entry.kategorie = kategorie;
+  if (photo) entry.photo = photo;
   state.log.unshift(entry);
 }
+
+// Client komprimiert Fotos vor dem Senden (JPEG, max. 1280px) - dieses Limit
+// ist nur ein Sicherheitsnetz gegen einen manipulierten/fehlerhaften Client.
+const LOG_PHOTO_MAX_LENGTH = 2 * 1024 * 1024;
 
 const STATUS_OPTIONS = [
   "Alarmiert",
@@ -293,7 +298,18 @@ function applyMutation(state, msg, kuerzel) {
       if (!Object.prototype.hasOwnProperty.call(LOG_KATEGORIE_LABELS, kategorie)) {
         throw new Error("Kategorie ist obligatorisch");
       }
-      addLog(state, kuerzel, text, kategorie);
+      let photo;
+      if (payload.photo) {
+        const data = String(payload.photo);
+        if (!data.startsWith("data:image/")) {
+          throw new Error("Ungültiges Bildformat");
+        }
+        if (data.length > LOG_PHOTO_MAX_LENGTH) {
+          throw new Error("Foto ist zu gross");
+        }
+        photo = data;
+      }
+      addLog(state, kuerzel, text, kategorie, photo);
       break;
     }
 
