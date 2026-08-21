@@ -208,11 +208,23 @@
     gap:2px;padding:2px;min-height:0;
   }
   .sichtung-btn{
+    position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:8px;font-family:var(--sans);
+  }
+  .sichtung-tap{
+    position:absolute;inset:0;width:100%;height:100%;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:8px;border:none;cursor:pointer;font-family:var(--sans);
+    gap:8px;border:none;background:transparent;color:inherit;cursor:pointer;font-family:inherit;
     -webkit-tap-highlight-color:transparent;user-select:none;
   }
-  .sichtung-btn:active{filter:brightness(0.85);}
+  .sichtung-tap:active{filter:brightness(0.85);}
+  .sichtung-minus{
+    position:absolute;top:10px;right:10px;z-index:2;
+    width:38px;height:38px;border-radius:50%;border:2px solid currentColor;
+    background:rgba(0,0,0,0.15);color:inherit;font-family:var(--mono);font-weight:700;font-size:18px;
+    cursor:pointer;-webkit-tap-highlight-color:transparent;
+  }
+  .sichtung-minus:active{filter:brightness(0.8);}
   .sichtung-label{font-size:clamp(14px,3vw,22px);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;}
   .sichtung-count{font-family:var(--mono);font-size:clamp(36px,10vw,64px);font-weight:700;line-height:1;}
   .sichtung-rot{background:var(--red);color:#fff;}
@@ -245,30 +257,48 @@
     <button type="button" class="secondary" id="btnCloseSichtung">Fertig</button>
   </div>
   <div class="sichtung-grid">
-    <button type="button" class="sichtung-btn sichtung-rot" data-tri="t1">
-      <span class="sichtung-label">T1 · Rot</span>
-      <span class="sichtung-count" id="sichtungCount-t1">0</span>
-    </button>
-    <button type="button" class="sichtung-btn sichtung-gelb" data-tri="t2">
-      <span class="sichtung-label">T2 · Gelb</span>
-      <span class="sichtung-count" id="sichtungCount-t2">0</span>
-    </button>
-    <button type="button" class="sichtung-btn sichtung-gruen" data-tri="t3">
-      <span class="sichtung-label">T3 · Grün</span>
-      <span class="sichtung-count" id="sichtungCount-t3">0</span>
-    </button>
-    <button type="button" class="sichtung-btn sichtung-blau" data-tri="t4">
-      <span class="sichtung-label">T4 · Blau</span>
-      <span class="sichtung-count" id="sichtungCount-t4">0</span>
-    </button>
-    <button type="button" class="sichtung-btn sichtung-schwarz" data-tri="schwarz">
-      <span class="sichtung-label">Schwarz</span>
-      <span class="sichtung-count" id="sichtungCount-schwarz">0</span>
-    </button>
-    <button type="button" class="sichtung-btn sichtung-weiss" data-tri="weiss">
-      <span class="sichtung-label">Weiss</span>
-      <span class="sichtung-count" id="sichtungCount-weiss">0</span>
-    </button>
+    <div class="sichtung-btn sichtung-rot">
+      <button type="button" class="sichtung-tap" data-tri="t1">
+        <span class="sichtung-label">T1 · Rot</span>
+        <span class="sichtung-count" id="sichtungCount-t1">0</span>
+      </button>
+      <button type="button" class="sichtung-minus" data-tri-minus="t1" title="Korrektur: -1">−1</button>
+    </div>
+    <div class="sichtung-btn sichtung-gelb">
+      <button type="button" class="sichtung-tap" data-tri="t2">
+        <span class="sichtung-label">T2 · Gelb</span>
+        <span class="sichtung-count" id="sichtungCount-t2">0</span>
+      </button>
+      <button type="button" class="sichtung-minus" data-tri-minus="t2" title="Korrektur: -1">−1</button>
+    </div>
+    <div class="sichtung-btn sichtung-gruen">
+      <button type="button" class="sichtung-tap" data-tri="t3">
+        <span class="sichtung-label">T3 · Grün</span>
+        <span class="sichtung-count" id="sichtungCount-t3">0</span>
+      </button>
+      <button type="button" class="sichtung-minus" data-tri-minus="t3" title="Korrektur: -1">−1</button>
+    </div>
+    <div class="sichtung-btn sichtung-blau">
+      <button type="button" class="sichtung-tap" data-tri="t4">
+        <span class="sichtung-label">T4 · Blau</span>
+        <span class="sichtung-count" id="sichtungCount-t4">0</span>
+      </button>
+      <button type="button" class="sichtung-minus" data-tri-minus="t4" title="Korrektur: -1">−1</button>
+    </div>
+    <div class="sichtung-btn sichtung-schwarz">
+      <button type="button" class="sichtung-tap" data-tri="schwarz">
+        <span class="sichtung-label">Schwarz</span>
+        <span class="sichtung-count" id="sichtungCount-schwarz">0</span>
+      </button>
+      <button type="button" class="sichtung-minus" data-tri-minus="schwarz" title="Korrektur: -1">−1</button>
+    </div>
+    <div class="sichtung-btn sichtung-weiss">
+      <button type="button" class="sichtung-tap" data-tri="weiss">
+        <span class="sichtung-label">Weiss</span>
+        <span class="sichtung-count" id="sichtungCount-weiss">0</span>
+      </button>
+      <button type="button" class="sichtung-minus" data-tri-minus="weiss" title="Korrektur: -1">−1</button>
+    </div>
   </div>
 </div>
 
@@ -1187,6 +1217,14 @@ function incrementTriage(field){
   wsSend('triage:update', { [field]: state.triage[field] });
 }
 
+function decrementTriage(field){
+  if(!state) return;
+  state.triage = state.triage || {};
+  state.triage[field] = Math.max(0, (state.triage[field] || 0) - 1); // Korrektur bei Fehltipp
+  updateSichtungDisplay();
+  wsSend('triage:update', { [field]: state.triage[field] });
+}
+
 function handleSaveFuehrung(){
   wsSend('fuehrung:update', {
     gel: document.getElementById('fGel').value,
@@ -1604,8 +1642,11 @@ document.getElementById('btnSaveEinsatz').addEventListener('click', handleSaveEi
 document.getElementById('btnSaveTriage').addEventListener('click', handleSaveTriage);
 document.getElementById('btnOpenSichtung').addEventListener('click', openSichtung);
 document.getElementById('btnCloseSichtung').addEventListener('click', closeSichtung);
-document.querySelectorAll('.sichtung-btn').forEach(btn => {
+document.querySelectorAll('.sichtung-tap').forEach(btn => {
   btn.addEventListener('click', () => incrementTriage(btn.dataset.tri));
+});
+document.querySelectorAll('.sichtung-minus').forEach(btn => {
+  btn.addEventListener('click', () => decrementTriage(btn.dataset.triMinus));
 });
 document.getElementById('btnNewEinsatz').addEventListener('click', handleNewEinsatz);
 document.getElementById('btnAddLog').addEventListener('click', handleAddLog);
