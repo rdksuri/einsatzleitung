@@ -918,10 +918,16 @@ function handleMapClick(e){
 function initMap(){
   try{
     map = L.map('map', {zoomControl:true}).setView([46.8800, 8.6350], 12); // Kanton Uri als Default-Zentrum
-    L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg', {
+    const standardLayer = L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg', {
       attribution: '© swisstopo',
       maxZoom: 18
-    }).addTo(map);
+    });
+    const satelliteLayer = L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg', {
+      attribution: '© swisstopo',
+      maxZoom: 18
+    });
+    standardLayer.addTo(map);
+    L.control.layers({ 'Standard': standardLayer, 'Satellit': satelliteLayer }, null, { position: 'topright' }).addTo(map);
 
     map.on('click', handleMapClick);
     mapReady = true;
