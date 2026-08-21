@@ -116,6 +116,12 @@
   .marker-btn.active{background:var(--ink);color:var(--paper);border-color:var(--ink);}
   .marker-btn.active .swatch{border-color:rgba(255,255,255,0.6);}
   .marker-btn:hover{filter:brightness(1.05);}
+  .zone-delete-btn{
+    font-family:var(--mono);font-weight:700;font-size:11px;
+    padding:6px 8px;border:1px solid var(--line);background:var(--panel);color:var(--red);
+    cursor:pointer;flex:0 0 auto;
+  }
+  .zone-delete-btn:hover{background:var(--red);color:#fff;border-color:var(--red);}
   #zoneDrawControls{flex:0 0 auto;display:flex;gap:4px;}
 
   .skizze-toolbar{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:10px;}
@@ -325,8 +331,11 @@
           <div class="coord" id="coordLabel">Bereitstellungsort: nicht gesetzt</div>
           <div class="marker-toolbar zone-toolbar" id="zoneToolbar">
             <button type="button" class="marker-btn zone-btn" data-zone="gefahrenzone" style="border-left:4px solid #c8281f;">Gefahrenzone</button>
+            <button type="button" class="zone-delete-btn" data-zone-delete="gefahrenzone" style="display:none;" title="Gefahrenzone entfernen">✕</button>
             <button type="button" class="marker-btn zone-btn" data-zone="sperrzone" style="border-left:4px solid #e8b923;">Sperrzone</button>
+            <button type="button" class="zone-delete-btn" data-zone-delete="sperrzone" style="display:none;" title="Sperrzone entfernen">✕</button>
             <button type="button" class="marker-btn zone-btn" data-zone="verkehrsumleitzone" style="border-left:4px solid #3d6b3a;">Verkehrsumleitzone</button>
+            <button type="button" class="zone-delete-btn" data-zone-delete="verkehrsumleitzone" style="display:none;" title="Verkehrsumleitzone entfernen">✕</button>
             <div id="zoneDrawControls" style="display:none;gap:4px;">
               <button type="button" id="btnFinishZone" class="secondary" style="flex:1;">Fertig</button>
               <button type="button" id="btnCancelZone" class="secondary" style="flex:1;">Abbrechen</button>
@@ -757,6 +766,21 @@ function iconForMarkerType(key){
   return key === 'einsatzort' ? makePinIcon('var(--red)') : makeSvgIcon(key);
 }
 
+// Ausgelagert, damit sowohl der normale Karten-Klick als auch ein Klick auf
+// eine bereits eingezeichnete Zone (siehe renderZones) dieselbe Logik
+// durchlaufen - Zonen sollen das Setzen neuer Pins nicht mehr blockieren.
+function handleMapClick(e){
+  if(drawingZone){
+    addZonePoint(e.latlng.lat, e.latlng.lng);
+    return;
+  }
+  if(activeMarkerType === 'bereitstellungsort'){
+    setBereitstellungsort(e.latlng.lat, e.latlng.lng);
+  } else {
+    setMarker(activeMarkerType, e.latlng.lat, e.latlng.lng);
+  }
+}
+
 function initMap(){
   try{
     map = L.map('map', {zoomControl:true}).setView([46.8800, 8.6350], 12); // Kanton Uri als Default-Zentrum
@@ -765,17 +789,7 @@ function initMap(){
       maxZoom: 18
     }).addTo(map);
 
-    map.on('click', (e) => {
-      if(drawingZone){
-        addZonePoint(e.latlng.lat, e.latlng.lng);
-        return;
-      }
-      if(activeMarkerType === 'bereitstellungsort'){
-        setBereitstellungsort(e.latlng.lat, e.latlng.lng);
-      } else {
-        setMarker(activeMarkerType, e.latlng.lat, e.latlng.lng);
-      }
-    });
+    map.on('click', handleMapClick);
     mapReady = true;
   }catch(e){
     console.error('Karte konnte nicht geladen werden:', e);
@@ -919,6 +933,7 @@ function renderZones(){
   if(!mapReady) return;
   for(const key of Object.keys(ZONE_LABELS)){
     const points = state.zones && state.zones[key];
+    const deleteBtn = document.querySelector(`.zone-delete-btn[data-zone-delete="${key}"]`);
     if(points && points.length >= 3){
       const latlngs = points.map(p => [p.lat, p.lng]);
       if(zoneLayers[key]){
@@ -926,11 +941,21 @@ function renderZones(){
       } else {
         zoneLayers[key] = L.polygon(latlngs, {color: ZONE_COLORS[key], fillColor: ZONE_COLORS[key], fillOpacity:0.25, weight:2}).addTo(map);
         zoneLayers[key].bindTooltip(ZONE_LABELS[key], {sticky:true, className:'map-label'});
-        zoneLayers[key].bindPopup(`<button type="button" class="secondary zone-delete-btn" data-zone-delete="${key}">${ZONE_LABELS[key]} entfernen</button>`);
+        // Bewusst KEIN Popup mehr: ein Klick auf die Zone soll genau das
+        // gleiche tun wie ein Klick auf die Karte darunter (Pin setzen,
+        // Zonenpunkt hinzufuegen) - sonst kann man nie mehr einen Pin
+        // innerhalb einer bereits eingezeichneten Zone platzieren. Zonen
+        // werden stattdessen ueber das "✕" neben dem jeweiligen
+        // Werkzeug-Button in der Toolbar geloescht.
+        zoneLayers[key].on('click', handleMapClick);
       }
-    } else if(zoneLayers[key]){
-      map.removeLayer(zoneLayers[key]);
-      delete zoneLayers[key];
+      if(deleteBtn) deleteBtn.style.display = '';
+    } else {
+      if(zoneLayers[key]){
+        map.removeLayer(zoneLayers[key]);
+        delete zoneLayers[key];
+      }
+      if(deleteBtn) deleteBtn.style.display = 'none';
     }
   }
 }
