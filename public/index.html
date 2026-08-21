@@ -128,6 +128,8 @@
     cursor:pointer;
   }
   .popup-delete-btn:hover{background:var(--red);color:#fff;}
+  .unsaved-badge{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--amber);}
+  input.field-dirty,select.field-dirty{border-color:var(--amber);background:#fdf6e3;}
   #zoneDrawControls{flex:0 0 auto;display:flex;gap:4px;}
 
   .skizze-toolbar{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:10px;}
@@ -310,9 +312,10 @@
             <input type="number" id="anzahlPatienten" min="0" value="0" readonly title="Wird automatisch aus den Sichtungskategorien berechnet">
           </div>
         </div>
-        <div style="margin-top:12px;display:flex;gap:8px;">
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
           <button id="btnSaveEinsatz">Speichern</button>
           <button class="danger" id="btnNewEinsatz">Neuer Einsatz</button>
+          <span class="unsaved-badge" id="unsavedEinsatz" style="display:none;">● ungespeichert</span>
         </div>
       </details>
     </div>
@@ -423,8 +426,9 @@
           <div><label for="fMedien">Mediendienst Kürzel</label><input type="text" id="fMedien" maxlength="20"></div>
           <div><label for="fMedienTel">Mediendienst Telefon</label><input type="tel" id="fMedienTel" maxlength="30"></div>
         </div>
-        <div style="margin-top:12px;">
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
           <button id="btnSaveFuehrung">Speichern</button>
+          <span class="unsaved-badge" id="unsavedFuehrung" style="display:none;">● ungespeichert</span>
         </div>
       </details>
     </div>
@@ -442,9 +446,10 @@
           <div><label>Schwarz (verstorben)</label><input type="number" id="schwarz" min="0" value="0"></div>
           <div><label>Weiss (unverletzt)</label><input type="number" id="weiss" min="0" value="0"></div>
         </div>
-        <div style="margin-top:12px;display:flex;gap:8px;">
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
           <button id="btnSaveTriage">Speichern</button>
           <button type="button" class="secondary" id="btnOpenSichtung">Sichten (grosse Icons)</button>
+          <span class="unsaved-badge" id="unsavedTriage" style="display:none;">● ungespeichert</span>
         </div>
         <div class="field-note">Wer die Anzahl anpasst, wird im Verlauf protokolliert. Anzahl Patienten wird automatisch berechnet.</div>
       </details>
@@ -984,10 +989,51 @@ function setInputValue(id, value){
   if(!isDirty){
     el.value = strValue;
   }
+  el.classList.toggle('field-dirty', isDirty);
   // Baseline immer aktualisieren: sobald die eigene Aenderung gespeichert wurde
   // (oder verworfen wird), gleicht sich der naechste Vergleich wieder an, statt
   // das Feld dauerhaft als "dirty" zu betrachten und externe Updates zu blockieren.
   lastServerValues[id] = strValue;
+}
+
+// --- "Ungespeichert"-Anzeige pro Kartengruppe (Einsatz/Triage/Fuehrung) ---
+// Ergaenzt den obigen Dirty-Schutz (der nur Konflikte mit fremden Broadcasts
+// abfaengt) um eine sofortige Rueckmeldung beim Tippen: sobald ein Feld einer
+// Gruppe angefasst wird, bevor der jeweilige Speichern-Button gedrueckt wurde,
+// erscheint ein Hinweis neben dem Button.
+const UNSAVED_GROUPS = {
+  einsatz: { fields: ['einsatzOrt', 'elsNummer', 'status'], badge: 'unsavedEinsatz' },
+  triage: { fields: ['t1', 't2', 't3', 't4', 'schwarz', 'weiss'], badge: 'unsavedTriage' },
+  fuehrung: {
+    fields: ['fGel','fGelTel','fBlFw','fBlFwTel','fBlSan','fBlSanTel','fBlPol','fBlPolTel',
+      'fElFw','fElFwTel','fElSan','fElSanTel','fElPol','fElPolTel','fFu','fFuTel','fMedien','fMedienTel'],
+    badge: 'unsavedFuehrung',
+  },
+};
+
+function setGroupUnsaved(groupName, unsaved){
+  const group = UNSAVED_GROUPS[groupName];
+  if(!group) return;
+  const badge = document.getElementById(group.badge);
+  if(badge) badge.style.display = unsaved ? '' : 'none';
+  if(!unsaved){
+    for(const fieldId of group.fields){
+      const el = document.getElementById(fieldId);
+      if(el) el.classList.remove('field-dirty');
+    }
+  }
+}
+
+for(const [groupName, group] of Object.entries(UNSAVED_GROUPS)){
+  for(const fieldId of group.fields){
+    const el = document.getElementById(fieldId);
+    if(el){
+      el.addEventListener('input', () => {
+        setGroupUnsaved(groupName, true);
+        el.classList.add('field-dirty');
+      });
+    }
+  }
 }
 
 function renderAll(){
@@ -1094,6 +1140,7 @@ function handleSaveEinsatz(){
     elsNummer: document.getElementById('elsNummer').value,
     status: document.getElementById('status').value,
   });
+  setGroupUnsaved('einsatz', false);
 }
 
 function handleSaveTriage(){
@@ -1105,6 +1152,7 @@ function handleSaveTriage(){
     schwarz: parseInt(document.getElementById('schwarz').value || '0', 10),
     weiss: parseInt(document.getElementById('weiss').value || '0', 10),
   });
+  setGroupUnsaved('triage', false);
 }
 
 const SICHTUNG_FIELDS = ['t1', 't2', 't3', 't4', 'schwarz', 'weiss'];
@@ -1160,6 +1208,7 @@ function handleSaveFuehrung(){
     mediendienst: document.getElementById('fMedien').value,
     mediendienstTel: document.getElementById('fMedienTel').value,
   });
+  setGroupUnsaved('fuehrung', false);
 }
 
 function handleNewEinsatz(){
