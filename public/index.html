@@ -172,6 +172,9 @@
   .icon-legend-item{display:flex;align-items:center;gap:8px;font-size:12px;}
   .icon-legend-icon{width:24px;height:28px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;position:relative;}
   .icon-legend-zone{width:24px;height:16px;flex:0 0 auto;border-radius:2px;}
+  .glossary{margin-top:8px;display:flex;flex-direction:column;gap:8px;}
+  .glossary-item{font-size:13px;line-height:1.4;}
+  .glossary-term{font-family:var(--mono);font-weight:700;}
   .map-pin{width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
     background:var(--pin-color, var(--red));border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5);}
   .map-svg-icon{filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));}
@@ -571,6 +574,13 @@
       </details>
     </div>
 
+    <div class="card">
+      <details>
+        <summary>Abkürzungsverzeichnis</summary>
+        <div class="glossary" id="glossaryList"></div>
+      </details>
+    </div>
+
   </div>
 </main>
 
@@ -855,6 +865,26 @@ function iconForMarkerType(key){
 // Zeigt dieselben Symbole, die auch auf der Karte erscheinen (kein separates
 // Set von Buchstaben-Badges), damit die Legende immer zum tatsaechlichen
 // Kartenbild passt.
+// Nur Kuerzel, die in der App selbst verwendet werden (Fuehrungsstruktur,
+// Sichtungskategorien, Verlaufskategorien) - keine zusaetzlich erfundenen Begriffe.
+const GLOSSARY = [
+  { term: 'GEL', desc: 'Gesamteinsatzleiter' },
+  { term: 'BL FW / BL SAN / BL POL', desc: 'Bereichsleiter Feuerwehr / Sanität / Polizei' },
+  { term: 'EL FW / EL SAN / EL POL', desc: 'Einsatzleiter Feuerwehr / Sanität / Polizei' },
+  { term: 'FU', desc: 'Führungsunterstützung' },
+  { term: 'ELS', desc: 'Einsatzleitsystem (ELS-Nummer des Einsatzes)' },
+  { term: 'KP', desc: 'Kommandoposten (Standort Einsatzleitung)' },
+  { term: 'T1 – T4', desc: 'Sichtungskategorien (Triage) nach Dringlichkeit: Rot am dringendsten, dann Gelb, Grün, Blau' },
+  { term: 'Schwarz / Weiss', desc: 'Sichtungskategorien: verstorben / unverletzt' },
+  { term: 'Front / Transport / Warteraum / Behandlung / MobSanHist', desc: 'Verlaufskategorien für Einträge aus dem jeweiligen Bereich' },
+];
+
+function renderGlossary(){
+  const el = document.getElementById('glossaryList');
+  if(!el) return;
+  el.innerHTML = GLOSSARY.map(g => `<div class="glossary-item"><span class="glossary-term">${escapeHtml(g.term)}</span> — ${escapeHtml(g.desc)}</div>`).join('');
+}
+
 function renderIconLegend(){
   const el = document.getElementById('iconLegend');
   if(!el) return;
@@ -1840,6 +1870,7 @@ document.getElementById('detailsKarte').addEventListener('toggle', (e) => {
   initSkizze();
   initVoiceInput();
   renderIconLegend();
+  renderGlossary();
   const token = getToken();
   const kuerzel = getKuerzel();
   if(token && kuerzel){
