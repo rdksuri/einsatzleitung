@@ -534,6 +534,9 @@
           <option value="warteraum">Warteraum</option>
           <option value="behandlung">Behandlung</option>
           <option value="mobsanhist">MobSanHist</option>
+          <option value="snz">SNZ</option>
+          <option value="fw">Fw</option>
+          <option value="pol">Pol</option>
         </select>
         <textarea id="logText" placeholder="Beobachtung, Massnahme, Meldung ..."></textarea>
         <div class="log-photo-row">
@@ -601,6 +604,9 @@
         <option value="warteraum">Warteraum</option>
         <option value="behandlung">Behandlung</option>
         <option value="mobsanhist">MobSanHist</option>
+        <option value="snz">SNZ</option>
+        <option value="fw">Fw</option>
+        <option value="pol">Pol</option>
       </select>
     </div>
     <div class="log" id="logList"><div class="empty">Noch keine Einträge.</div></div>
@@ -772,6 +778,9 @@ const LOG_KATEGORIE_LABELS = {
   warteraum: 'Warteraum',
   behandlung: 'Behandlung',
   mobsanhist: 'MobSanHist',
+  snz: 'SNZ',
+  fw: 'Fw',
+  pol: 'Pol',
 };
 // Symbole 1:1 aus dem kantonalen Einsatzbehelf (Zeichenerklaerung "Erste
 // Absprache") bzw. der Checkliste Chef Transport nachgebaut, statt
@@ -883,6 +892,8 @@ const GLOSSARY = [
   { term: 'T1 – T4', desc: 'Sichtungskategorien (Triage) nach Dringlichkeit: Rot am dringendsten, dann Gelb, Grün, Blau' },
   { term: 'Schwarz / Weiss', desc: 'Sichtungskategorien: verstorben / unverletzt' },
   { term: 'Front / Transport / Warteraum / Behandlung / MobSanHist', desc: 'Verlaufskategorien für Einträge aus dem jeweiligen Bereich' },
+  { term: 'SNZ', desc: 'Sanitätsnotrufzentrale - Verlaufskategorie für Einträge von/an die SNZ' },
+  { term: 'Fw / Pol', desc: 'Feuerwehr / Polizei - Verlaufskategorien für Einträge von/an die jeweilige Organisation' },
 ];
 
 function renderGlossary(){
@@ -1537,6 +1548,9 @@ const KATEGORIE_ALIASES = {
   // "MobSanHist" ist kein normales Wort - Spracherkennung verhoert sich
   // hier haeufig, daher mehrere bekannte Fehltranskriptionen als Alias.
   mobsanhist: ['mobsanhist', 'mob san hist', 'mob sani hist', 'mob sanhist', 'mopsan hist', 'mobile sanitätshilfsstelle', 'mobile san hist'],
+  snz: ['snz', 's n z', 'sanitätsnotrufzentrale'],
+  fw: ['fw', 'f w', 'feuerwehr'],
+  pol: ['pol', 'polizei'],
 };
 
 function findKategorieInText(text){

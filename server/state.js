@@ -40,6 +40,9 @@ const LOG_KATEGORIE_LABELS = {
   warteraum: "Warteraum",
   behandlung: "Behandlung",
   mobsanhist: "MobSanHist",
+  snz: "SNZ",
+  fw: "Fw",
+  pol: "Pol",
 };
 
 function defaultState() {
